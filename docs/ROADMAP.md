@@ -39,6 +39,8 @@ com.lambao.animike/
 
 ViewModel expose `StateFlow<State>` + `Flow<Effect>`, nhận event qua 1 hàm `onEvent()`. Composable chỉ render state và gửi event — không chứa logic.
 
+Mọi ViewModel kế thừa `ui/base/BaseViewModel<State, Event, Effect>` — lớp base giữ `_state`/`state`, `_effect`/`effect` (Channel) và các hàm `setState { }`/`sendEffect()`; subclass chỉ cần override `onEvent()`. Quyết định dùng base class ngay từ đầu (thay vì đợi 3 screen rồi mới rút) vì đây là phần lõi ổn định, ít khả năng cần hình dạng khác nhau giữa các screen — nếu một screen cần thêm flow riêng (VD Paging ở SearchScreen, xem `paging-mvi-testing.md`), cứ khai thêm `val items: Flow<PagingData<T>>` bên cạnh, không cần đưa vào base.
+
 Nguyên tắc: **UI → (Event) → ViewModel → Repository → (API | Room) → (State) → UI**. UI không bao giờ gọi thẳng API.
 
 Chi tiết pattern: xem skill `compose-expert` (`references/paging-mvi-testing.md`) và checklist trong `.claude/agents/compose-reviewer.md`.
@@ -74,7 +76,7 @@ Khai báo trong `gradle/libs.versions.toml` rồi thêm vào `app/build.gradle.k
 ### Phase 0b — Nền tảng (1-2 ngày)
 - [ ] Thêm dependencies (mục 2), quyền INTERNET
 - [ ] Setup Hilt (Application class, module cung cấp Retrofit/Room)
-- [ ] Tạo cấu trúc package như mục 1 + base MVI (BaseViewModel hoặc convention Contract)
+- [x] Tạo cấu trúc package như mục 1 + base MVI: `ui/base/BaseViewModel.kt` (quyết định dùng BaseViewModel thay vì chỉ convention — xem mục 1)
 - [ ] Định nghĩa `JikanApi` interface + DTO cho 1 endpoint (`/top/anime`), gọi thử hiển thị list đơn giản → xác nhận pipeline hoạt động
 
 ### Phase 1 — Home (3-5 ngày)
