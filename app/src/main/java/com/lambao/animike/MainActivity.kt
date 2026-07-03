@@ -6,7 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.lambao.animike.ui.home.HomeScreen
+import com.lambao.animike.ui.navigation.AniMikeNavHost
 import com.lambao.animike.ui.theme.AniMikeTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             AniMikeTheme {
-                HomeScreen()
+                AniMikeNavHost()
             }
         }
     }

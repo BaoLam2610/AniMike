@@ -8,6 +8,8 @@ import com.lambao.animike.ui.base.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 @HiltViewModel
@@ -15,29 +17,83 @@ class HomeViewModel @Inject constructor(
     private val repository: AnimeRepository,
 ) : BaseViewModel<HomeState, HomeEvent, HomeEffect>(HomeState()) {
 
-    private var loadJob: Job? = null
+    // Đảm bảo không bao giờ có 2 request Jikan chạy song song — kể cả khi
+    // retry một section xen vào giữa lúc chuỗi tải ban đầu (init) chưa xong
+    // (jikan-api SKILL.md: "KHÔNG gọi song song nhiều endpoint").
+    private val loadMutex = Mutex()
+
+    private var seasonNowJob: Job? = null
+    private var topAnimeJob: Job? = null
+    private var upcomingJob: Job? = null
 
     init {
-        loadTopAnime()
+        viewModelScope.launch {
+            loadSeasonNow()
+            loadTopAnime()
+            loadUpcoming()
+        }
     }
 
     override fun onEvent(event: HomeEvent) {
         when (event) {
-            HomeEvent.OnRetry -> loadTopAnime()
+            is HomeEvent.OnAnimeClick -> sendEffect(HomeEffect.NavigateToDetail(event.malId))
+            HomeEvent.OnRetrySeasonNow -> {
+                seasonNowJob?.cancel()
+                seasonNowJob = viewModelScope.launch { loadSeasonNow() }
+            }
+
+            HomeEvent.OnRetryTopAnime -> {
+                topAnimeJob?.cancel()
+                topAnimeJob = viewModelScope.launch { loadTopAnime() }
+            }
+
+            HomeEvent.OnRetryUpcoming -> {
+                upcomingJob?.cancel()
+                upcomingJob = viewModelScope.launch { loadUpcoming() }
+            }
         }
     }
 
-    private fun loadTopAnime() {
-        loadJob?.cancel()
-        loadJob = viewModelScope.launch {
-            setState { copy(isLoading = true, error = null) }
-            when (val result = repository.getTopAnime()) {
+    private suspend fun loadSeasonNow() {
+        setState { copy(seasonNow = seasonNow.copy(isLoading = true, error = null)) }
+        loadMutex.withLock {
+            when (val result = repository.getSeasonNow()) {
                 is ApiResult.Success -> setState {
-                    copy(isLoading = false, animeList = result.data)
+                    copy(seasonNow = SectionState(isLoading = false, animeList = result.data))
                 }
 
                 is ApiResult.Error -> setState {
-                    copy(isLoading = false, error = result.error.toUserMessage())
+                    copy(seasonNow = seasonNow.copy(isLoading = false, error = result.error.toUserMessage()))
+                }
+            }
+        }
+    }
+
+    private suspend fun loadTopAnime() {
+        setState { copy(topAnime = topAnime.copy(isLoading = true, error = null)) }
+        loadMutex.withLock {
+            when (val result = repository.getTopAnime()) {
+                is ApiResult.Success -> setState {
+                    copy(topAnime = SectionState(isLoading = false, animeList = result.data))
+                }
+
+                is ApiResult.Error -> setState {
+                    copy(topAnime = topAnime.copy(isLoading = false, error = result.error.toUserMessage()))
+                }
+            }
+        }
+    }
+
+    private suspend fun loadUpcoming() {
+        setState { copy(upcoming = upcoming.copy(isLoading = true, error = null)) }
+        loadMutex.withLock {
+            when (val result = repository.getUpcoming()) {
+                is ApiResult.Success -> setState {
+                    copy(upcoming = SectionState(isLoading = false, animeList = result.data))
+                }
+
+                is ApiResult.Error -> setState {
+                    copy(upcoming = upcoming.copy(isLoading = false, error = result.error.toUserMessage()))
                 }
             }
         }
