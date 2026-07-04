@@ -3,6 +3,7 @@ package com.lambao.animike.data.remote
 import com.lambao.animike.data.remote.dto.AnimeDto
 import com.lambao.animike.data.remote.dto.AnimeFullDto
 import com.lambao.animike.data.remote.dto.CharacterEntryDto
+import com.lambao.animike.data.remote.dto.GenreDto
 import com.lambao.animike.data.remote.dto.JikanListResponse
 import com.lambao.animike.data.remote.dto.JikanResponse
 import com.lambao.animike.data.remote.dto.RecommendationEntryDto
@@ -29,4 +30,18 @@ interface JikanApi {
 
     @GET("anime/{id}/recommendations")
     suspend fun getRecommendations(@Path("id") id: Int): JikanListResponse<RecommendationEntryDto>
+
+    @GET("anime")
+    suspend fun searchAnime(
+        @Query("q") query: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("type") type: String? = null,
+        @Query("status") status: String? = null,
+        @Query("genres") genres: String? = null,
+        @Query("order_by") orderBy: String? = null,
+        @Query("sort") sort: String? = null,
+    ): JikanListResponse<AnimeDto>
+
+    @GET("genres/anime")
+    suspend fun getGenres(): JikanListResponse<GenreDto>
 }

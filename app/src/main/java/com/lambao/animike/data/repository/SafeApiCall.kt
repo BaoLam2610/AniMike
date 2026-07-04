@@ -11,21 +11,26 @@ import java.io.IOException
  */
 suspend fun <T> safeApiCall(call: suspend () -> T): ApiResult<T> = try {
     ApiResult.Success(call())
-} catch (e: HttpException) {
-    ApiResult.Error(e.toAppError())
-} catch (e: IOException) {
-    ApiResult.Error(AppError.NoConnection)
 } catch (e: CancellationException) {
     throw e
 } catch (e: Exception) {
     // Bắt cả lỗi deserialize (SerializationException...) — Jikan trả dữ liệu
     // thiếu/sai định dạng không nên làm crash toàn app.
-    ApiResult.Error(AppError.Unknown(e.message))
+    ApiResult.Error(e.toAppError())
 }
 
-private fun HttpException.toAppError(): AppError = when (code()) {
-    429 -> AppError.RateLimited
-    404 -> AppError.NotFound
-    500, 503 -> AppError.ServerBusy
-    else -> AppError.Unknown(message())
+/**
+ * Public để nơi khác không đi qua safeApiCall (VD PagingSource — LoadState.Error
+ * chỉ giữ Throwable thô) vẫn phân loại lỗi theo đúng 1 quy tắc duy nhất.
+ */
+fun Throwable.toAppError(): AppError = when (this) {
+    is HttpException -> when (code()) {
+        429 -> AppError.RateLimited
+        404 -> AppError.NotFound
+        500, 503 -> AppError.ServerBusy
+        else -> AppError.Unknown(message())
+    }
+
+    is IOException -> AppError.NoConnection
+    else -> AppError.Unknown(message)
 }

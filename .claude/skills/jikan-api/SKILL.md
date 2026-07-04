@@ -75,11 +75,29 @@ Repository trả `Result`/sealed class, phân loại:
 | 500/503 | "Máy chủ Jikan đang bận" + nút thử lại |
 | IOException | "Kiểm tra kết nối mạng" + fallback cache nếu có |
 
-## Caching
+## Caching — Room + stale-while-revalidate
 
-- Room là source of truth cho dữ liệu đã tải; TTL 24h (field `fetchedAt` trong entity)
-- Chi tiết anime, season, top: cache-first — hiện cache ngay, refresh nền nếu hết TTL
-- Search: không cache (trừ Paging RemoteMediator sau này)
+Jikan KHÔNG hỗ trợ HTTP cache phía client (`Cache-Control: must-revalidate, private`,
+`pragma: no-cache`, `expires: -1` — verify 2026-07) → không dùng được OkHttp Cache/ETag.
+Cache tự quản trong Room là tầng duy nhất. Server Jikan tự cache ~24h nên TTL client
+24h = khớp chu kỳ dữ liệu thực, không phải "chấp nhận dữ liệu cũ".
+
+**Luồng chuẩn (mọi repository có cache):**
+1. UI luôn đọc từ Room qua `Flow` — không bao giờ render thẳng từ response API
+2. Emit cache ngay (nếu có) → so `fetchedAt` với TTL → hết hạn thì gọi API nền →
+   ghi đè vào Room theo key (transaction: xóa list cũ theo `listKey` + insert mới) →
+   `Flow` tự re-emit. Không merge — server là nguồn chân lý
+3. Refresh lỗi: giữ cache cũ hiển thị + báo lỗi nhẹ (khớp bảng error handling ở trên)
+4. Pull-to-refresh bỏ qua TTL — user chủ động là gọi API luôn (vẫn ghi vào Room)
+
+**TTL theo loại dữ liệu:**
+
+| Dữ liệu | TTL |
+|---|---|
+| `genres/anime` | 7 ngày (gần như tĩnh) |
+| seasons/now, top, upcoming | 24h |
+| detail full / characters / recommendations | 24h |
+| Search | KHÔNG cache (trừ Paging RemoteMediator sau này) |
 
 ## Test nhanh endpoint
 

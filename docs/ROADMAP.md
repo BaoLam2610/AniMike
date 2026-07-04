@@ -62,10 +62,14 @@ Khai báo trong `gradle/libs.versions.toml` rồi thêm vào `app/build.gradle.k
 
 ## 3. Xử lý rate limit Jikan (quan trọng)
 
-- **OkHttp Interceptor** giới hạn tốc độ: tối đa ~1 request / 400ms
-- Retry với backoff khi gặp HTTP **429** (Too Many Requests) và **503**
-- **Room làm cache**: dữ liệu đã tải (chi tiết anime, season) lưu DB, chỉ gọi lại API khi cache cũ hơn ~24h
-- Trên Home, tải tuần tự từng section thay vì gọi 4 API cùng lúc
+- **OkHttp Interceptor** giới hạn tốc độ: tối đa ~1 request / 400ms ✅ (Phase 0b)
+- Retry với backoff khi gặp HTTP **429** (Too Many Requests) và **503** ✅ (Phase 0b)
+- Trên Home, tải tuần tự từng section thay vì gọi 4 API cùng lúc ✅ (Phase 1, Mutex)
+- **Room làm cache — stale-while-revalidate** (Phase 3): UI luôn đọc từ Room qua
+  `Flow`; emit cache ngay, hết TTL thì refresh nền rồi ghi đè theo key → Flow tự
+  re-emit; pull-to-refresh bỏ qua TTL. TTL: genres 7 ngày, list/detail 24h,
+  search không cache. Jikan không hỗ trợ HTTP cache/ETag (đã verify) nên đây là
+  tầng cache duy nhất — chi tiết trong `.claude/skills/jikan-api/SKILL.md` mục Caching
 
 ## 4. Roadmap theo phase
 
@@ -94,7 +98,10 @@ Khai báo trong `gradle/libs.versions.toml` rồi thêm vào `app/build.gradle.k
 ### Phase 3 — Favorites & offline (3-4 ngày)
 - [ ] Room: entity + DAO cho favorites
 - [ ] Nút yêu thích ở Detail, màn hình Favorites (bottom navigation)
-- [ ] Cache chi tiết anime vào Room → xem offline
+- [ ] Cache stale-while-revalidate cho Home sections + Detail (xem mục 3):
+  entity list dạng `(listKey, malId, ..., position, fetchedAt)` cho season/top/upcoming,
+  entity detail theo `malId`, genres TTL 7 ngày; repository chuyển sang expose `Flow` từ Room
+- [ ] Pull-to-refresh trên Home (bỏ qua TTL)
 
 ### Phase 4 — Hoàn thiện v1 (3-5 ngày)
 - [ ] Lịch chiếu theo thứ (Schedules), Season Archive

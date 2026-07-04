@@ -8,6 +8,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.lambao.animike.ui.detail.DetailScreen
 import com.lambao.animike.ui.home.HomeScreen
+import com.lambao.animike.ui.search.SearchScreen
 
 @Composable
 fun AniMikeNavHost() {
@@ -16,6 +17,13 @@ fun AniMikeNavHost() {
     NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
             HomeScreen(
+                onNavigateToDetail = { malId -> navController.navigate(Routes.detail(malId)) },
+                onNavigateToSearch = { navController.navigate(Routes.SEARCH) },
+            )
+        }
+        composable(Routes.SEARCH) {
+            SearchScreen(
+                onBackClick = navController::popBackStack,
                 onNavigateToDetail = { malId -> navController.navigate(Routes.detail(malId)) },
             )
         }

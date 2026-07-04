@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,18 +17,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.ui.theme.Dimens
 
-private val CardWidth = 120.dp
-
+// Rộng cố định 120dp khi dùng trong LazyRow (Home/Detail), fillMaxWidth khi
+// dùng trong grid (Search) — width do modifier của call site quyết định.
 @Composable
 fun AnimeCard(anime: Anime, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val placeholderPainter = ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
 
-    Column(modifier = modifier.width(CardWidth).clickable(onClick = onClick)) {
+    Column(modifier = modifier.clickable(onClick = onClick)) {
         AsyncImage(
             model = anime.imageUrl,
             // Ảnh trang trí — title hiển thị ngay bên dưới đã đủ cho TalkBack,
@@ -76,7 +74,6 @@ fun AnimeCard(anime: Anime, onClick: () -> Unit, modifier: Modifier = Modifier) 
 fun AnimeCardPlaceholder(progress: Float, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .width(CardWidth)
             .aspectRatio(2f / 3f)
             .clip(RoundedCornerShape(Dimens.RadiusCard))
             .shimmerEffect(progress),

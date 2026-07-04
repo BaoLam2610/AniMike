@@ -4,6 +4,8 @@ import com.lambao.animike.data.repository.AnimeDetailRepository
 import com.lambao.animike.data.repository.AnimeDetailRepositoryImpl
 import com.lambao.animike.data.repository.AnimeRepository
 import com.lambao.animike.data.repository.AnimeRepositoryImpl
+import com.lambao.animike.data.repository.SearchRepository
+import com.lambao.animike.data.repository.SearchRepositoryImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -21,4 +23,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindAnimeDetailRepository(impl: AnimeDetailRepositoryImpl): AnimeDetailRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSearchRepository(impl: SearchRepositoryImpl): SearchRepository
 }

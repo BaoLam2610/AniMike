@@ -1,15 +1,21 @@
 package com.lambao.animike.ui.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -19,6 +25,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,6 +41,7 @@ import com.lambao.animike.ui.theme.Dimens
 @Composable
 fun HomeScreen(
     onNavigateToDetail: (Int) -> Unit,
+    onNavigateToSearch: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -44,11 +54,15 @@ fun HomeScreen(
         }
     }
 
-    HomeScreenContent(state = state, onEvent = viewModel::onEvent)
+    HomeScreenContent(state = state, onNavigateToSearch = onNavigateToSearch, onEvent = viewModel::onEvent)
 }
 
 @Composable
-private fun HomeScreenContent(state: HomeState, onEvent: (HomeEvent) -> Unit) {
+private fun HomeScreenContent(
+    state: HomeState,
+    onNavigateToSearch: () -> Unit,
+    onEvent: (HomeEvent) -> Unit,
+) {
     Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -57,6 +71,7 @@ private fun HomeScreenContent(state: HomeState, onEvent: (HomeEvent) -> Unit) {
             contentPadding = PaddingValues(vertical = Dimens.SpaceLg),
             verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXl),
         ) {
+            item { HomeTopBar(onSearchClick = onNavigateToSearch) }
             item {
                 AnimeSection(
                     title = "Season Now",
@@ -86,6 +101,34 @@ private fun HomeScreenContent(state: HomeState, onEvent: (HomeEvent) -> Unit) {
 }
 
 @Composable
+private fun HomeTopBar(onSearchClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "AniMike",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Box(
+            modifier = Modifier
+                .size(Dimens.IconButtonSize)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface)
+                .clickable(onClick = onSearchClick)
+                .semantics { contentDescription = "Tìm kiếm" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "🔍", style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+@Composable
 private fun AnimeSection(
     title: String,
     section: SectionState,
@@ -107,7 +150,12 @@ private fun AnimeSection(
                     contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
                     horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
                 ) {
-                    items(6, key = { it }) { AnimeCardPlaceholder(progress = shimmerProgress) }
+                    items(6, key = { it }) {
+                        AnimeCardPlaceholder(
+                            progress = shimmerProgress,
+                            modifier = Modifier.width(Dimens.CardWidth),
+                        )
+                    }
                 }
             }
 
@@ -125,7 +173,11 @@ private fun AnimeSection(
                 horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
             ) {
                 items(section.animeList, key = { it.malId }) { anime ->
-                    AnimeCard(anime = anime, onClick = { onAnimeClick(anime.malId) })
+                    AnimeCard(
+                        anime = anime,
+                        onClick = { onAnimeClick(anime.malId) },
+                        modifier = Modifier.width(Dimens.CardWidth),
+                    )
                 }
             }
         }
@@ -175,6 +227,7 @@ private fun HomeScreenPreview() {
                 ),
                 upcoming = SectionState(isLoading = true),
             ),
+            onNavigateToSearch = {},
             onEvent = {},
         )
     }

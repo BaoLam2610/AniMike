@@ -41,8 +41,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -53,6 +51,7 @@ import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.RelationGroup
 import com.lambao.animike.ui.components.AnimeCard
+import com.lambao.animike.ui.components.BackButton
 import com.lambao.animike.ui.theme.Dimens
 import com.lambao.animike.ui.theme.success
 import androidx.core.net.toUri
@@ -252,25 +251,6 @@ private fun AiringPill() {
 }
 
 @Composable
-private fun BackButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .size(Dimens.IconButtonSize)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = "Quay lại" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "←",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-    }
-}
-
-@Composable
 private fun GenreChips(genres: List<String>) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
@@ -415,7 +395,11 @@ private fun RecommendationsSection(recommendations: List<Anime>, onClick: (Int) 
             horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
         ) {
             items(recommendations, key = { it.malId }) { anime ->
-                AnimeCard(anime = anime, onClick = { onClick(anime.malId) })
+                AnimeCard(
+                    anime = anime,
+                    onClick = { onClick(anime.malId) },
+                    modifier = Modifier.width(Dimens.CardWidth),
+                )
             }
         }
     }

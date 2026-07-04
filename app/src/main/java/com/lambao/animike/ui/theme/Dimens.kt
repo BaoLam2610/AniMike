@@ -15,6 +15,7 @@ object Dimens {
     // Semantic aliases
     val ScreenPadding = SpaceLg
     val CardGap = SpaceMd
+    val CardWidth = 120.dp
 
     // Corner radius
     val RadiusChip = 8.dp
