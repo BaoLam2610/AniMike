@@ -1,6 +1,7 @@
 # AniMike — Roadmap & Quy trình phát triển
 
-Hiện trạng project: Kotlin + Jetpack Compose (Material 3), minSdk 24, targetSdk 36 — mới chỉ là template trống.
+Hiện trạng project: Kotlin + Jetpack Compose (Material 3), minSdk 24, targetSdk 36.
+Đã hoàn thành Phase 0a → 2 (theme, networking pipeline, Home, Detail, Search) — đang ở MVP 1 (Phase 3).
 
 **Skills & agents đã cài trong `.claude/`** (Claude Code tự nhận, xem `CLAUDE.md` ở root):
 - `skills/compose-expert` — guide Compose chuyên sâu (24 references + source androidx)
@@ -73,44 +74,69 @@ Khai báo trong `gradle/libs.versions.toml` rồi thêm vào `app/build.gradle.k
 
 ## 4. Roadmap theo phase
 
-### Phase 0a — Design (1-2 ngày)
-- [ ] Duyệt mockup các màn chính (Home, Detail, Search) theo design system `animike-design` — dark anime-style
-- [ ] Implement theme: `Color.kt`, `Type.kt` (font Inter), `Dimens.kt` theo tokens trong `.claude/skills/animike-design/SKILL.md`
+Nguyên tắc: mỗi MVP là một đợt nhỏ, **xong hẳn (build + review + commit) mới sang đợt sau** — không phát triển nhiều thứ cùng lúc.
 
-### Phase 0b — Nền tảng (1-2 ngày)
-- [ ] Thêm dependencies (mục 2), quyền INTERNET
-- [ ] Setup Hilt (Application class, module cung cấp Retrofit/Room)
-- [x] Tạo cấu trúc package như mục 1 + base MVI: `ui/base/BaseViewModel.kt` (quyết định dùng BaseViewModel thay vì chỉ convention — xem mục 1)
-- [ ] Định nghĩa `JikanApi` interface + DTO cho 1 endpoint (`/top/anime`), gọi thử hiển thị list đơn giản → xác nhận pipeline hoạt động
+### Phase 0a — Design ✅ (2026-07)
+- [x] Duyệt mockup các màn chính (Home, Detail, Search) theo design system `animike-design` — bản duyệt nằm ở Artifact (Figma MCP bị giới hạn quota)
+- [x] Implement theme: `Color.kt`, `Type.kt` (font Inter bundle local), `Dimens.kt` theo tokens
 
-### Phase 1 — Home (3-5 ngày)
-- [ ] HomeScreen: các section Season Now / Top / Upcoming (LazyColumn + LazyRow)
-- [ ] AnimeCard component (ảnh Coil, title, score)
-- [ ] Loading/error state + retry
-- [ ] Navigation Compose: Home → Detail (truyền `malId`)
+### Phase 0b — Nền tảng ✅ (2026-07)
+- [x] Dependencies + quyền INTERNET (lưu ý trần version: xem `gradle/libs.versions.toml` — AGP 9.0.1/compileSdk 36 cần lifecycle ≤2.10.0, androidx.hilt ≤1.3.0, 2 cờ trong `gradle.properties`)
+- [x] Setup Hilt (Application class, NetworkModule, RepositoryModule)
+- [x] Cấu trúc package như mục 1 + base MVI: `ui/base/BaseViewModel.kt`
+- [x] `JikanApi` + DTO + rate-limit/retry interceptor, pipeline `/top/anime` → list — verified trên thiết bị thật
 
-### Phase 2 — Detail + Search (5-7 ngày)
-- [ ] DetailScreen: `/anime/{id}/full` — ảnh, synopsis, thông tin, trailer (mở YouTube), genres
-- [ ] Tab/section: nhân vật, đề xuất, anime liên quan
-- [ ] SearchScreen: TextField + debounce (~500ms), Paging 3 cho kết quả
-- [ ] Bộ lọc: type, status, genre, sắp xếp
+### Phase 1 — Home ✅ (2026-07)
+- [x] HomeScreen: 3 section Season Now / Top / Upcoming (LazyColumn + LazyRow), tải tuần tự với Mutex
+- [x] AnimeCard component (Coil, 2:3, score badge) + shimmer loading
+- [x] Loading/error/empty state + retry độc lập từng section
+- [x] Navigation Compose: Home → Detail (truyền `malId`)
 
-### Phase 3 — Favorites & offline (3-4 ngày)
+### Phase 2 — Detail + Search ✅ (2026-07)
+- [x] DetailScreen: `/anime/{id}/full` — hero header + gradient, synopsis, trailer (YouTube), genres
+- [x] Section: nhân vật + seiyuu, đề xuất (điều hướng Detail→Detail), anime liên quan
+- [x] SearchScreen: TextField + debounce 500ms + nút xóa, Paging 3, danh sách duyệt mặc định khi chưa gõ
+- [x] Bộ lọc: type, status, genre (multi-select), sắp xếp
+
+### MVP 1 (Phase 3) — Favorites & offline (3-4 ngày) ← ĐANG LÀM
 - [ ] Room: entity + DAO cho favorites
-- [ ] Nút yêu thích ở Detail, màn hình Favorites (bottom navigation)
+- [ ] Nút yêu thích ở Detail, màn hình Favorites
+- [ ] Bottom navigation 3 tab: Home / Search / Favorites
 - [ ] Cache stale-while-revalidate cho Home sections + Detail (xem mục 3):
   entity list dạng `(listKey, malId, ..., position, fetchedAt)` cho season/top/upcoming,
   entity detail theo `malId`, genres TTL 7 ngày; repository chuyển sang expose `Flow` từ Room
 - [ ] Pull-to-refresh trên Home (bỏ qua TTL)
 
-### Phase 4 — Hoàn thiện v1 (3-5 ngày)
-- [ ] Lịch chiếu theo thứ (Schedules), Season Archive
-- [ ] Rate limiter + retry 429 hoàn chỉnh
+### MVP 2 (Phase 4) — Chốt v1 (3-5 ngày)
+- [ ] Lịch chiếu theo thứ (`/schedules`), Season Archive (`/seasons/{year}/{season}`, `/seasons`)
 - [ ] Icon app, splash screen, review lại dark mode
 - [ ] Test trên nhiều kích thước màn hình; release build (minify + ProGuard rules cho Retrofit/serialization)
 
-### Phase 5 — v1.x / v2 (xem FEATURES.md mục 2-3)
-- Local tracking tiến độ xem → Nhân vật/People → Reviews → Random/Watch → Manga → Notifications
+### MVP 3 — Nâng cấp UI hướng streaming-app (tham khảo kit Figma Animax)
+Cần user export ảnh các màn hình chính từ kit Figma trước khi bắt đầu (Figma MCP hết quota).
+- [ ] Hero carousel ở Home (anime nổi bật, ảnh lớn)
+- [ ] Detail chia tab: Tổng quan / Tập (`/anime/{id}/episodes`) / Liên quan
+- [ ] Nút "Xem trên..." — streaming platform links (`/anime/{id}/streaming`)
+- [ ] Tab media: trailer/PV/promo (`/anime/{id}/videos`)
+- [ ] Polish motion/transition giữa các màn hình
+
+### MVP 4 — Khám phá
+- [ ] Random anime "Hôm nay xem gì?" (`/random/anime`)
+- [ ] Tập mới phát hành + promo mới (`/watch/episodes`, `/watch/promos`)
+- [ ] Đề xuất cộng đồng (`/recommendations/anime`)
+- [ ] Biểu đồ phân bố điểm + số người xem (`/anime/{id}/statistics`), nhạc OP/ED (`/anime/{id}/themes`)
+
+### MVP 5 — Nhân vật / Người / Studio
+- [ ] Top nhân vật (`/top/characters`), trang nhân vật (`/characters/{id}/full`)
+- [ ] Trang seiyuu/staff (`/people/{id}/full`, `/anime/{id}/staff`)
+- [ ] Trang studio (`/producers/{id}/full`) — bấm tên studio ở Detail để mở
+
+### MVP 6 — Tracking local
+- [ ] Trạng thái xem: Đang xem / Đã xem / Tạm dừng / Bỏ / Dự định xem (Room)
+- [ ] Đánh dấu tập đã xem, chấm điểm cá nhân
+
+### Xa hơn (xem FEATURES.md mục 2-3)
+- Reviews → Manga → Xem profile MAL công khai → Notification lịch chiếu → Widget/Deep link
 
 ## 5. Quy trình làm việc (cho người mới)
 

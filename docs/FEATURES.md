@@ -59,12 +59,14 @@
 - Đánh dấu tập đã xem, chấm điểm cá nhân
 - (Thay thế cho MAL list vì API read-only)
 
-### 2.3. Nhân vật & Người
+### 2.3. Nhân vật & Người & Studio
 | Tính năng | Endpoint |
 |---|---|
 | Chi tiết nhân vật, anime xuất hiện, seiyuu | `GET /characters/{id}/full` |
 | Chi tiết người (seiyuu, đạo diễn, staff) | `GET /people/{id}/full` |
+| Staff của một anime (đạo diễn, âm nhạc...) | `GET /anime/{id}/staff` |
 | Top nhân vật | `GET /top/characters` |
+| Trang studio — bấm tên studio ở Detail | `GET /producers/{id}/full` |
 
 ### 2.4. Reviews
 - Reviews của anime: `GET /anime/{id}/reviews`
@@ -75,6 +77,14 @@
 - Tập mới phát hành: `GET /watch/episodes`
 - Trailer/promo mới: `GET /watch/promos`
 - Đề xuất từ cộng đồng: `GET /recommendations/anime`
+
+### 2.6. Chi tiết anime mở rộng (hướng streaming-app, MVP 3-4)
+| Tính năng | Endpoint |
+|---|---|
+| Nút "Xem trên..." — link nền tảng hợp pháp (Crunchyroll, Netflix...) | `GET /anime/{id}/streaming` |
+| Tab media: trailer, PV, promo video | `GET /anime/{id}/videos` |
+| Biểu đồ phân bố điểm, số người đang xem/đã xem | `GET /anime/{id}/statistics` |
+| Nhạc opening/ending | `GET /anime/{id}/themes` |
 
 ---
 
