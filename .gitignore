@@ -8,3 +8,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Ảnh tham chiếu kit Figma Animax (MVP3) — dùng để đọc/so sánh khi code UI,
+# không cần commit vào repo (dung lượng lớn, chỉ có giá trị tham khảo cục bộ).
+docs/UI/
