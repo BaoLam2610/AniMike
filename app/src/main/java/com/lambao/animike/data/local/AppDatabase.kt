@@ -6,9 +6,11 @@ import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
 import com.lambao.animike.data.local.dao.FavoriteDao
 import com.lambao.animike.data.local.dao.GenreDao
+import com.lambao.animike.data.local.dao.SeasonYearDao
 import com.lambao.animike.data.local.entity.CachedAnimeDetailEntity
 import com.lambao.animike.data.local.entity.CachedAnimeListEntity
 import com.lambao.animike.data.local.entity.CachedGenreEntity
+import com.lambao.animike.data.local.entity.CachedSeasonYearEntity
 import com.lambao.animike.data.local.entity.FavoriteEntity
 
 @Database(
@@ -17,8 +19,9 @@ import com.lambao.animike.data.local.entity.FavoriteEntity
         CachedAnimeDetailEntity::class,
         CachedGenreEntity::class,
         FavoriteEntity::class,
+        CachedSeasonYearEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,4 +29,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun animeDetailDao(): AnimeDetailDao
     abstract fun genreDao(): GenreDao
     abstract fun favoriteDao(): FavoriteDao
+    abstract fun seasonYearDao(): SeasonYearDao
 }

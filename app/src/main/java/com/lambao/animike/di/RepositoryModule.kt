@@ -8,6 +8,8 @@ import com.lambao.animike.data.repository.FavoriteRepository
 import com.lambao.animike.data.repository.FavoriteRepositoryImpl
 import com.lambao.animike.data.repository.SearchRepository
 import com.lambao.animike.data.repository.SearchRepositoryImpl
+import com.lambao.animike.data.repository.SeasonArchiveRepository
+import com.lambao.animike.data.repository.SeasonArchiveRepositoryImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -33,4 +35,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindFavoriteRepository(impl: FavoriteRepositoryImpl): FavoriteRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSeasonArchiveRepository(impl: SeasonArchiveRepositoryImpl): SeasonArchiveRepository
 }

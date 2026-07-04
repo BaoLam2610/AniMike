@@ -5,6 +5,7 @@ object CacheTtl {
     const val LIST_MS = 24 * 60 * 60 * 1000L
     const val DETAIL_MS = 24 * 60 * 60 * 1000L
     const val GENRE_MS = 7 * 24 * 60 * 60 * 1000L
+    const val SEASON_LIST_MS = 7 * 24 * 60 * 60 * 1000L
 }
 
 fun isExpired(fetchedAt: Long, ttlMs: Long, now: Long = System.currentTimeMillis()): Boolean {

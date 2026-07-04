@@ -1,4 +1,4 @@
-package com.lambao.animike.ui.search
+package com.lambao.animike.ui.seasonarchive
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,17 +21,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
@@ -41,23 +36,27 @@ import androidx.paging.compose.itemContentType
 import androidx.paging.compose.itemKey
 import com.lambao.animike.data.repository.toAppError
 import com.lambao.animike.domain.model.Anime
-import com.lambao.animike.domain.model.Genre
-import com.lambao.animike.domain.model.SearchFilters
+import com.lambao.animike.domain.model.SeasonYear
 import com.lambao.animike.domain.model.toUserMessage
 import com.lambao.animike.ui.components.AnimeCard
 import com.lambao.animike.ui.components.AnimeCardPlaceholder
-import com.lambao.animike.ui.components.BackButton
 import com.lambao.animike.ui.components.PagingGridError
 import com.lambao.animike.ui.components.PagingGridLoading
 import com.lambao.animike.ui.components.PagingRefreshErrorBanner
 import com.lambao.animike.ui.components.rememberShimmerProgress
 import com.lambao.animike.ui.theme.Dimens
 
+private val seasonLabels = mapOf(
+    "winter" to "Đông",
+    "spring" to "Xuân",
+    "summer" to "Hè",
+    "fall" to "Thu",
+)
+
 @Composable
-fun SearchScreen(
-    onBackClick: () -> Unit,
+fun SeasonArchiveScreen(
     onNavigateToDetail: (Int) -> Unit,
-    viewModel: SearchViewModel = hiltViewModel(),
+    viewModel: SeasonArchiveViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val pagingItems = viewModel.items.collectAsLazyPagingItems()
@@ -65,52 +64,56 @@ fun SearchScreen(
     LaunchedEffect(Unit) {
         viewModel.effect.collect { effect ->
             when (effect) {
-                is SearchEffect.NavigateToDetail -> onNavigateToDetail(effect.malId)
+                is SeasonArchiveEffect.NavigateToDetail -> onNavigateToDetail(effect.malId)
             }
         }
     }
 
-    SearchScreenContent(
-        state = state,
-        pagingItems = pagingItems,
-        onBackClick = onBackClick,
-        onEvent = viewModel::onEvent,
-    )
+    SeasonArchiveScreenContent(state = state, pagingItems = pagingItems, onEvent = viewModel::onEvent)
 }
 
 @Composable
-private fun SearchScreenContent(
-    state: SearchState,
+private fun SeasonArchiveScreenContent(
+    state: SeasonArchiveState,
     pagingItems: LazyPagingItems<Anime>,
-    onBackClick: () -> Unit,
-    onEvent: (SearchEvent) -> Unit,
+    onEvent: (SeasonArchiveEvent) -> Unit,
 ) {
     // contentWindowInsets = 0: AniMikeNavHost đã có Scaffold ngoài tiêu thụ
-    // insets — tránh tiêu thụ 2 lần gây khoảng trắng dư.
+    // insets cho bottom nav — tránh tiêu thụ 2 lần gây khoảng trắng dư.
     Scaffold(modifier = Modifier.fillMaxSize(), contentWindowInsets = WindowInsets(0)) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
-            ) {
-                BackButton(onClick = onBackClick)
-                SearchTextField(
-                    query = state.query,
-                    onQueryChange = { onEvent(SearchEvent.OnQueryChange(it)) },
-                    modifier = Modifier.weight(1f),
+            Text(
+                text = "Kho lưu trữ mùa",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(Dimens.ScreenPadding),
+            )
+
+            YearRow(
+                years = state.years,
+                selectedYear = state.selectedYear,
+                onYearSelected = { onEvent(SeasonArchiveEvent.OnYearSelected(it)) },
+            )
+            SeasonRow(
+                availableSeasons = state.years.find { it.year == state.selectedYear }?.seasons.orEmpty(),
+                selectedSeason = state.selectedSeason,
+                onSeasonSelected = { onEvent(SeasonArchiveEvent.OnSeasonSelected(it)) },
+            )
+
+            // Danh sách năm/mùa lỗi (offline lần đầu, chưa có cache) — báo lỗi
+            // riêng vì đây là dữ liệu điều khiển chip, không phải nội dung grid.
+            if (state.yearsError != null) {
+                PagingRefreshErrorBanner(
+                    message = state.yearsError,
+                    onRetry = { onEvent(SeasonArchiveEvent.OnRetryYears) },
                 )
             }
 
-            FilterRow(filters = state.filters, genres = state.genres, onEvent = onEvent)
-
-            // Banner lỗi nhẹ khi refresh (đổi query/filter) thất bại nhưng vẫn còn
+            // Banner lỗi nhẹ khi refresh (đổi năm/mùa) thất bại nhưng vẫn còn
             // item cũ để hiện — giữ cache cũ hiển thị + báo lỗi nhẹ, không che
             // grid bên dưới (jikan-api SKILL.md mục Caching, điểm 3).
             if (pagingItems.loadState.refresh is LoadState.Error && pagingItems.itemCount > 0) {
@@ -122,9 +125,9 @@ private fun SearchScreenContent(
             }
 
             when {
-                // Không check itemCount == 0: đổi query/filter tạo PagingSource mới nhưng
-                // LazyPagingItems vẫn giữ item cũ cho tới khi trang mới tải xong — ưu tiên
-                // refresh-loading để tránh hiện nhầm kết quả của query/filter trước.
+                // Không check itemCount == 0: khi đổi năm/mùa, flatMapLatest tạo Pager mới
+                // nhưng LazyPagingItems vẫn giữ item cũ của lựa chọn trước cho tới khi
+                // trang mới tải xong — ưu tiên refresh-loading để tránh hiện nhầm list cũ.
                 pagingItems.loadState.refresh is LoadState.Loading -> PagingGridLoading()
 
                 pagingItems.loadState.refresh is LoadState.Error && pagingItems.itemCount == 0 -> {
@@ -135,11 +138,11 @@ private fun SearchScreenContent(
                     )
                 }
 
-                pagingItems.itemCount == 0 -> SearchEmptyContent()
+                pagingItems.itemCount == 0 -> EmptyContent()
 
                 else -> ResultsGrid(
                     pagingItems = pagingItems,
-                    onAnimeClick = { onEvent(SearchEvent.OnAnimeClick(it)) },
+                    onAnimeClick = { onEvent(SeasonArchiveEvent.OnAnimeClick(it)) },
                 )
             }
         }
@@ -147,97 +150,40 @@ private fun SearchScreenContent(
 }
 
 @Composable
-private fun SearchTextField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
-    TextField(
-        value = query,
-        onValueChange = onQueryChange,
-        placeholder = {
-            Text(text = "Tìm kiếm anime...", style = MaterialTheme.typography.bodyMedium)
-        },
-        trailingIcon = {
-            if (query.isNotEmpty()) {
-                Text(
-                    text = "✕",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .clickable { onQueryChange("") }
-                        .semantics { contentDescription = "Xóa tìm kiếm" }
-                        .padding(Dimens.SpaceMd),
-                )
-            }
-        },
-        singleLine = true,
-        shape = RoundedCornerShape(Dimens.RadiusButton),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent,
-        ),
-        modifier = modifier,
-    )
-}
-
-@Composable
-private fun FilterRow(filters: SearchFilters, genres: List<Genre>, onEvent: (SearchEvent) -> Unit) {
-    Column {
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
-        ) {
-            item(key = "type_all") {
-                FilterChip(label = "Tất cả", selected = filters.type == null) {
-                    onEvent(SearchEvent.OnTypeFilterChange(null))
-                }
-            }
-            item(key = "type_tv") {
-                FilterChip(label = "TV", selected = filters.type == "tv") {
-                    onEvent(SearchEvent.OnTypeFilterChange("tv"))
-                }
-            }
-            item(key = "type_movie") {
-                FilterChip(label = "Movie", selected = filters.type == "movie") {
-                    onEvent(SearchEvent.OnTypeFilterChange("movie"))
-                }
-            }
-            item(key = "status_airing") {
-                FilterChip(label = "Đang chiếu", selected = filters.status == "airing") {
-                    onEvent(SearchEvent.OnStatusFilterChange(if (filters.status == "airing") null else "airing"))
-                }
-            }
-            item(key = "sort_popular") {
-                FilterChip(label = "Phổ biến", selected = filters.orderBy == "popularity") {
-                    onEvent(SearchEvent.OnSortChange("popularity", "asc"))
-                }
-            }
-            item(key = "sort_score") {
-                FilterChip(label = "Điểm cao", selected = filters.orderBy == "score") {
-                    onEvent(SearchEvent.OnSortChange("score", "desc"))
-                }
-            }
-        }
-
-        if (genres.isNotEmpty()) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
-                horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
-            ) {
-                items(genres, key = { it.id }) { genre ->
-                    FilterChip(
-                        label = genre.name,
-                        selected = genre.id in filters.genreIds,
-                        onClick = { onEvent(SearchEvent.OnGenreToggle(genre.id)) },
-                    )
-                }
-            }
+private fun YearRow(years: List<SeasonYear>, selectedYear: Int?, onYearSelected: (Int) -> Unit) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+    ) {
+        items(years, key = { it.year }) { year ->
+            PickerChip(
+                label = year.year.toString(),
+                selected = year.year == selectedYear,
+                onClick = { onYearSelected(year.year) },
+            )
         }
     }
 }
 
 @Composable
-private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun SeasonRow(availableSeasons: List<String>, selectedSeason: String?, onSeasonSelected: (String) -> Unit) {
+    if (availableSeasons.isEmpty()) return
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+    ) {
+        items(seasonOrder.filter { it in availableSeasons }, key = { it }) { season ->
+            PickerChip(
+                label = seasonLabels[season] ?: season,
+                selected = season == selectedSeason,
+                onClick = { onSeasonSelected(season) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PickerChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(Dimens.RadiusChip))
@@ -263,7 +209,7 @@ private fun ResultsGrid(pagingItems: LazyPagingItems<Anime>, onAnimeClick: (Int)
         verticalArrangement = Arrangement.spacedBy(Dimens.CardGap),
     ) {
         // items(count, key, span, contentType, itemContent) là member function
-        // của LazyGridScope (như item()/align()/weight()) — không cần import.
+        // của LazyGridScope — không cần import (giống item()/align()/weight()).
         items(
             count = pagingItems.itemCount,
             key = pagingItems.itemKey { it.malId },
@@ -312,10 +258,10 @@ private fun ResultsGrid(pagingItems: LazyPagingItems<Anime>, onAnimeClick: (Int)
 }
 
 @Composable
-private fun SearchEmptyContent() {
+private fun EmptyContent() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            text = "Không tìm thấy kết quả",
+            text = "Không có anime nào trong mùa này",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

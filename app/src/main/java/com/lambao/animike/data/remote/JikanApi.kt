@@ -7,6 +7,7 @@ import com.lambao.animike.data.remote.dto.GenreDto
 import com.lambao.animike.data.remote.dto.JikanListResponse
 import com.lambao.animike.data.remote.dto.JikanResponse
 import com.lambao.animike.data.remote.dto.RecommendationEntryDto
+import com.lambao.animike.data.remote.dto.SeasonYearDto
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -21,6 +22,16 @@ interface JikanApi {
 
     @GET("seasons/upcoming")
     suspend fun getUpcoming(@Query("page") page: Int = 1): JikanListResponse<AnimeDto>
+
+    @GET("seasons")
+    suspend fun getSeasonsList(): JikanListResponse<SeasonYearDto>
+
+    @GET("seasons/{year}/{season}")
+    suspend fun getSeasonArchive(
+        @Path("year") year: Int,
+        @Path("season") season: String,
+        @Query("page") page: Int = 1,
+    ): JikanListResponse<AnimeDto>
 
     @GET("anime/{id}/full")
     suspend fun getAnimeFull(@Path("id") id: Int): JikanResponse<AnimeFullDto>

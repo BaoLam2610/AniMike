@@ -21,12 +21,14 @@ import com.lambao.animike.ui.detail.DetailScreen
 import com.lambao.animike.ui.favorites.FavoritesScreen
 import com.lambao.animike.ui.home.HomeScreen
 import com.lambao.animike.ui.search.SearchScreen
+import com.lambao.animike.ui.seasonarchive.SeasonArchiveScreen
 
 private data class BottomNavItem(val route: String, val label: String, val icon: String)
 
 private val bottomNavItems = listOf(
     BottomNavItem(Routes.HOME, "Trang chủ", "⌂"),
     BottomNavItem(Routes.SEARCH, "Tìm kiếm", "🔍"),
+    BottomNavItem(Routes.SEASON_ARCHIVE, "Mùa", "📅"),
     BottomNavItem(Routes.FAVORITES, "Yêu thích", "♥"),
 )
 
@@ -37,7 +39,7 @@ fun AniMikeNavHost() {
 
     Scaffold(
         bottomBar = {
-            // Bottom nav chỉ hiện ở 3 tab gốc, ẩn khi push sang Detail.
+            // Bottom nav chỉ hiện ở 4 tab gốc, ẩn khi push sang Detail.
             if (bottomNavItems.any { it.route == currentRoute }) {
                 AniMikeBottomBar(
                     currentRoute = currentRoute,
@@ -70,6 +72,11 @@ fun AniMikeNavHost() {
             }
             composable(Routes.FAVORITES) {
                 FavoritesScreen(
+                    onNavigateToDetail = { malId -> navController.navigate(Routes.detail(malId)) },
+                )
+            }
+            composable(Routes.SEASON_ARCHIVE) {
+                SeasonArchiveScreen(
                     onNavigateToDetail = { malId -> navController.navigate(Routes.detail(malId)) },
                 )
             }
