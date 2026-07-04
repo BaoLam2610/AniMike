@@ -3,8 +3,8 @@ package com.lambao.animike.data.repository
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import com.lambao.animike.data.remote.JikanApi
-import com.lambao.animike.domain.mapper.toDomain
-import com.lambao.animike.domain.model.Anime
+import com.lambao.animike.domain.mapper.toScheduledAnime
+import com.lambao.animike.domain.model.ScheduledAnime
 import retrofit2.HttpException
 import java.io.IOException
 
@@ -15,13 +15,13 @@ import java.io.IOException
 class AnimeSchedulePagingSource(
     private val api: JikanApi,
     private val day: String,
-) : PagingSource<Int, Anime>() {
+) : PagingSource<Int, ScheduledAnime>() {
 
-    override suspend fun load(params: LoadParams<Int>): LoadResult<Int, Anime> {
+    override suspend fun load(params: LoadParams<Int>): LoadResult<Int, ScheduledAnime> {
         val page = params.key ?: 1
         return try {
             val response = api.getSchedules(day, page)
-            val anime = response.data.map { it.toDomain() }.distinctBy { it.malId }
+            val anime = response.data.map { it.toScheduledAnime() }.distinctBy { it.malId }
             LoadResult.Page(
                 data = anime,
                 prevKey = if (page == 1) null else page - 1,
@@ -34,7 +34,7 @@ class AnimeSchedulePagingSource(
         }
     }
 
-    override fun getRefreshKey(state: PagingState<Int, Anime>): Int? =
+    override fun getRefreshKey(state: PagingState<Int, ScheduledAnime>): Int? =
         state.anchorPosition?.let { anchorPosition ->
             val anchorPage = state.closestPageToPosition(anchorPosition)
             anchorPage?.prevKey?.plus(1) ?: anchorPage?.nextKey?.minus(1)

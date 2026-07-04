@@ -23,8 +23,17 @@ object Dimens {
     val RadiusButton = 12.dp
     val RadiusSheet = 20.dp
 
-    // Detail screen
+    // Hero header — dùng chung cho Detail (ảnh cover full-width) và Home (hero
+    // section, kit Animax MVP3 UI-2)
     val HeroHeaderHeight = 360.dp
     val IconButtonSize = 40.dp
     val AvatarSize = 64.dp
+
+    // Schedules — dòng ngang (thumbnail + title + meta), kit Animax MVP3 UI-3
+    val ScheduleThumbnailWidth = 96.dp
+    val ScheduleRowHeight = 88.dp
+
+    // Detail — thẻ tập phim trong EpisodesSection, kit Animax MVP3 UI-4
+    val EpisodeCardWidth = 140.dp
+    val TabIndicatorHeight = 2.dp
 }

@@ -16,6 +16,9 @@ data class HomeState(
     val topAnime: SectionState = SectionState(),
     val upcoming: SectionState = SectionState(),
     val isRefreshing: Boolean = false,
+    // Hero header (kit Animax) = anime đầu tiên của Season Now — hiển thị
+    // trạng thái yêu thích riêng vì đây là nút hành động, không chỉ card.
+    val heroIsFavorite: Boolean = false,
 )
 
 sealed interface HomeEvent {
@@ -24,6 +27,7 @@ sealed interface HomeEvent {
     data object OnRetryTopAnime : HomeEvent
     data object OnRetryUpcoming : HomeEvent
     data object OnPullToRefresh : HomeEvent
+    data object OnHeroFavoriteClick : HomeEvent
 }
 
 sealed interface HomeEffect {

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +54,8 @@ import coil3.compose.AsyncImage
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
+import com.lambao.animike.domain.model.AnimeReview
+import com.lambao.animike.domain.model.Episode
 import com.lambao.animike.domain.model.RelationGroup
 import com.lambao.animike.ui.components.AnimeCard
 import com.lambao.animike.ui.components.BackButton
@@ -110,6 +114,8 @@ private fun DetailScreenContent(
                     detail = state.detail,
                     characters = state.characters,
                     recommendations = state.recommendations,
+                    episodes = state.episodes,
+                    reviews = state.reviews,
                     isFavorite = state.isFavorite,
                     onBackClick = onBackClick,
                     onEvent = onEvent,
@@ -136,6 +142,8 @@ private fun DetailContent(
     detail: AnimeDetail,
     characters: List<AnimeCharacter>,
     recommendations: List<Anime>,
+    episodes: List<Episode>,
+    reviews: List<AnimeReview>,
     isFavorite: Boolean,
     onBackClick: () -> Unit,
     onEvent: (DetailEvent) -> Unit,
@@ -167,14 +175,17 @@ private fun DetailContent(
 
         item { SynopsisSection(synopsis = detail.synopsis) }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
+        item { EpisodesSection(episodes = episodes) }
+        item { Spacer(Modifier.height(Dimens.SpaceLg)) }
         item { CharactersSection(characters = characters) }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
         item { RelationsSection(relations = detail.relations) }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
         item {
-            RecommendationsSection(
+            RecommendationsOrReviewsSection(
                 recommendations = recommendations,
-                onClick = { onEvent(DetailEvent.OnRecommendationClick(it)) },
+                reviews = reviews,
+                onRecommendationClick = { onEvent(DetailEvent.OnRecommendationClick(it)) },
             )
         }
         item { Spacer(Modifier.height(Dimens.SpaceXl)) }
@@ -188,7 +199,10 @@ private fun HeroHeader(
     onBackClick: () -> Unit,
     onFavoriteClick: () -> Unit,
 ) {
-    val placeholderPainter = ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
+    // ColorPainter không override equals() — remember để tránh AsyncImage coi
+    // placeholder/error/fallback là "đổi" ở mỗi recomposition.
+    val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
+    val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
     val background = MaterialTheme.colorScheme.background
 
     Box(modifier = Modifier.fillMaxWidth().height(Dimens.HeroHeaderHeight)) {
@@ -225,7 +239,7 @@ private fun HeroHeader(
             verticalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm)) {
-                ScoreBadge(score = detail.score)
+                if (detail.score != "N/A") HeroScoreBadge(score = detail.score)
                 if (detail.isAiring) AiringPill()
             }
             Text(
@@ -249,8 +263,11 @@ private fun detailMetaLine(detail: AnimeDetail): String = listOfNotNull(
     detail.studios.takeIf { it != "N/A" },
 ).joinToString(" · ")
 
+// Style riêng cho hero header (nền surface alpha 80% đè trên ảnh cover, không
+// phải nền primary như ScoreBadge trên AnimeCard — 2 ngữ cảnh khác nhau, xem
+// animike-design SKILL.md mục Score badge).
 @Composable
-private fun ScoreBadge(score: String) {
+private fun HeroScoreBadge(score: String) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(Dimens.RadiusChip))
@@ -372,7 +389,8 @@ private fun CharactersSection(characters: List<AnimeCharacter>) {
 
 @Composable
 private fun CharacterItem(character: AnimeCharacter) {
-    val placeholderPainter = ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
+    val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
+    val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(Dimens.AvatarSize),
@@ -408,6 +426,60 @@ private fun CharacterItem(character: AnimeCharacter) {
     }
 }
 
+// Không có thumbnail per-episode từ Jikan (/anime/{id}/episodes chỉ trả
+// title/aired/filler/recap) — chỉ page 1 (100 tập), đủ cho đa số anime.
+@Composable
+private fun EpisodesSection(episodes: List<Episode>) {
+    if (episodes.isEmpty()) return
+    Column {
+        Text(
+            text = "Các tập",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(horizontal = Dimens.ScreenPadding),
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+        ) {
+            items(episodes, key = { it.number }) { episode -> EpisodeItem(episode) }
+        }
+    }
+}
+
+@Composable
+private fun EpisodeItem(episode: Episode) {
+    Column(
+        modifier = Modifier
+            .width(Dimens.EpisodeCardWidth)
+            .clip(RoundedCornerShape(Dimens.RadiusCard))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(Dimens.SpaceMd),
+    ) {
+        Text(
+            text = "Tập ${episode.number}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = episode.title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = Dimens.SpaceXs),
+        )
+        if (episode.isFiller || episode.isRecap) {
+            Text(
+                text = if (episode.isFiller) "Filler" else "Recap",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = Dimens.SpaceXs),
+            )
+        }
+    }
+}
+
 @Composable
 private fun RelationsSection(relations: List<RelationGroup>) {
     if (relations.isEmpty()) return
@@ -430,28 +502,169 @@ private fun RelationsSection(relations: List<RelationGroup>) {
     }
 }
 
+// Kit Animax: tab "More Like This" / "Comments" (underline indicator). Ở đây
+// đổi tên "Comments" thành "Đánh giá" vì Jikan chỉ có reviews MAL, không có
+// bình luận thời gian thực. Chỉ hiện tab khi CẢ 2 đều có dữ liệu — nếu chỉ 1
+// bên có, hiện thẳng section đó (không cần tab để chọn 1 lựa chọn duy nhất).
+private enum class DetailTab { RECOMMENDATIONS, REVIEWS }
+
 @Composable
-private fun RecommendationsSection(recommendations: List<Anime>, onClick: (Int) -> Unit) {
-    if (recommendations.isEmpty()) return
-    Column {
-        Text(
-            text = "Đề xuất tương tự",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(horizontal = Dimens.ScreenPadding),
+private fun RecommendationsOrReviewsSection(
+    recommendations: List<Anime>,
+    reviews: List<AnimeReview>,
+    onRecommendationClick: (Int) -> Unit,
+) {
+    when {
+        recommendations.isEmpty() && reviews.isEmpty() -> return
+
+        recommendations.isNotEmpty() && reviews.isNotEmpty() -> {
+            var selectedTab by rememberSaveable { mutableStateOf(DetailTab.RECOMMENDATIONS) }
+            Column {
+                DetailTabRow(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
+                when (selectedTab) {
+                    DetailTab.RECOMMENDATIONS -> RecommendationsRow(recommendations, onRecommendationClick)
+                    DetailTab.REVIEWS -> ReviewsList(reviews)
+                }
+            }
+        }
+
+        recommendations.isNotEmpty() -> Column {
+            SectionTitle("Đề xuất tương tự")
+            RecommendationsRow(recommendations, onRecommendationClick)
+        }
+
+        else -> Column {
+            SectionTitle("Đánh giá")
+            ReviewsList(reviews)
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.padding(horizontal = Dimens.ScreenPadding),
+    )
+}
+
+@Composable
+private fun DetailTabRow(selectedTab: DetailTab, onTabSelected: (DetailTab) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceLg),
+    ) {
+        DetailTabItem(
+            label = "Đề xuất",
+            selected = selectedTab == DetailTab.RECOMMENDATIONS,
+            onClick = { onTabSelected(DetailTab.RECOMMENDATIONS) },
         )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
+        DetailTabItem(
+            label = "Đánh giá",
+            selected = selectedTab == DetailTab.REVIEWS,
+            onClick = { onTabSelected(DetailTab.REVIEWS) },
+        )
+    }
+}
+
+// width(IntrinsicSize.Min) bắt buộc Column đo intrinsic width của Text trước
+// (thay vì chỉ nhận constraint "phần còn lại của Row" từ trên xuống) — nếu bỏ
+// dòng này, Box.fillMaxWidth() bên dưới sẽ fill theo constraint đó (gần hết
+// Row) thay vì theo đúng độ rộng chữ, và item đầu tiên sẽ chiếm hết chỗ của
+// item thứ 2 (Row mặc định không đo theo sibling, xem Modifier.width doc).
+@Composable
+private fun DetailTabItem(label: String, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(IntrinsicSize.Min)
+            .clickable(onClick = onClick)
+            .padding(vertical = Dimens.SpaceXs),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(Dimens.SpaceXs))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(Dimens.TabIndicatorHeight)
+                .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent),
+        )
+    }
+}
+
+@Composable
+private fun RecommendationsRow(recommendations: List<Anime>, onClick: (Int) -> Unit) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
+    ) {
+        items(recommendations, key = { it.malId }) { anime ->
+            AnimeCard(
+                anime = anime,
+                onClick = { onClick(anime.malId) },
+                modifier = Modifier.width(Dimens.CardWidth),
+            )
+        }
+    }
+}
+
+// reviews đã được giới hạn số lượng ở AnimeDetailRepository.getReviews() —
+// chưa cần phân trang/expand cho MVP.
+@Composable
+private fun ReviewsList(reviews: List<AnimeReview>) {
+    Column(
+        modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+        verticalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
+    ) {
+        reviews.forEach { review -> ReviewCard(review) }
+    }
+}
+
+@Composable
+private fun ReviewCard(review: AnimeReview) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Dimens.RadiusCard))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(Dimens.SpaceMd),
+        verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            items(recommendations, key = { it.malId }) { anime ->
-                AnimeCard(
-                    anime = anime,
-                    onClick = { onClick(anime.malId) },
-                    modifier = Modifier.width(Dimens.CardWidth),
+            Text(
+                text = review.username,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (review.score != null) {
+                Text(
+                    text = "★ ${review.score}/10",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
                 )
             }
         }
+        Text(
+            text = review.reviewText,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

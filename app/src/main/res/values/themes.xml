@@ -4,4 +4,12 @@
     <style name="Theme.AniMike" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/animike_background</item>
     </style>
+
+    <!-- Splash (core-splashscreen compat, minSdk 24 → hoạt động cả trước Android 12).
+         Sau splash tự chuyển về Theme.AniMike qua postSplashScreenTheme. -->
+    <style name="Theme.AniMike.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/animike_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.AniMike</item>
+    </style>
 </resources>

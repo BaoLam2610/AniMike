@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.lambao.animike.ui.navigation.AniMikeNavHost
 import com.lambao.animike.ui.theme.AniMikeTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -13,6 +14,9 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Phải gọi trước super.onCreate() — gắn splash compat (minSdk 24) và
+        // chuyển về Theme.AniMike (postSplashScreenTheme trong themes.xml).
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         // AniMike là dark-only (v1) — force icon status/nav bar sáng thay vì
         // để enableEdgeToEdge() suy ra từ chế độ dark mode của hệ thống.

@@ -3,10 +3,12 @@ package com.lambao.animike.data.remote
 import com.lambao.animike.data.remote.dto.AnimeDto
 import com.lambao.animike.data.remote.dto.AnimeFullDto
 import com.lambao.animike.data.remote.dto.CharacterEntryDto
+import com.lambao.animike.data.remote.dto.EpisodeDto
 import com.lambao.animike.data.remote.dto.GenreDto
 import com.lambao.animike.data.remote.dto.JikanListResponse
 import com.lambao.animike.data.remote.dto.JikanResponse
 import com.lambao.animike.data.remote.dto.RecommendationEntryDto
+import com.lambao.animike.data.remote.dto.ReviewDto
 import com.lambao.animike.data.remote.dto.SeasonYearDto
 import retrofit2.http.GET
 import retrofit2.http.Path
@@ -41,6 +43,14 @@ interface JikanApi {
 
     @GET("anime/{id}/recommendations")
     suspend fun getRecommendations(@Path("id") id: Int): JikanListResponse<RecommendationEntryDto>
+
+    // Chỉ lấy page 1 (100 tập/trang) — đủ cho đa số anime, MVP chưa cần phân
+    // trang tập (xem AnimeDetailRepository.getEpisodes).
+    @GET("anime/{id}/episodes")
+    suspend fun getEpisodes(@Path("id") id: Int, @Query("page") page: Int = 1): JikanListResponse<EpisodeDto>
+
+    @GET("anime/{id}/reviews")
+    suspend fun getReviews(@Path("id") id: Int, @Query("page") page: Int = 1): JikanListResponse<ReviewDto>
 
     @GET("anime")
     suspend fun searchAnime(

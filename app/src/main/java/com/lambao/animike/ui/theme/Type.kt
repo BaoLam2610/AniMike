@@ -30,7 +30,13 @@ val Typography = Typography(
     ),
     headlineLarge = Default.headlineLarge.copy(fontFamily = InterFontFamily),
     headlineMedium = Default.headlineMedium.copy(fontFamily = InterFontFamily),
-    headlineSmall = Default.headlineSmall.copy(fontFamily = InterFontFamily),
+    // Số thứ hạng đè lên AnimeCard (section "Top Hits Anime" ở Home, kit Animax)
+    headlineSmall = TextStyle(
+        fontFamily = InterFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 28.sp,
+        lineHeight = 32.sp,
+    ),
     titleLarge = Default.titleLarge.copy(fontFamily = InterFontFamily),
     // Section header ("Season Now", "Top Anime")
     titleMedium = TextStyle(

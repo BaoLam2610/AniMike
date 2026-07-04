@@ -119,7 +119,7 @@ class DetailViewModel @Inject constructor(
             }
         }
 
-        // Nhân vật & đề xuất không critical — lỗi thì section tương ứng để trống.
+        // Nhân vật/đề xuất/tập/reviews không critical — lỗi thì section tương ứng để trống.
         val charactersResult = loadMutex.withLock { repository.getCharacters(malId) }
         if (charactersResult is ApiResult.Success) {
             setState { copy(characters = charactersResult.data) }
@@ -128,6 +128,16 @@ class DetailViewModel @Inject constructor(
         val recommendationsResult = loadMutex.withLock { repository.getRecommendations(malId) }
         if (recommendationsResult is ApiResult.Success) {
             setState { copy(recommendations = recommendationsResult.data) }
+        }
+
+        val episodesResult = loadMutex.withLock { repository.getEpisodes(malId) }
+        if (episodesResult is ApiResult.Success) {
+            setState { copy(episodes = episodesResult.data) }
+        }
+
+        val reviewsResult = loadMutex.withLock { repository.getReviews(malId) }
+        if (reviewsResult is ApiResult.Success) {
+            setState { copy(reviews = reviewsResult.data) }
         }
     }
 }

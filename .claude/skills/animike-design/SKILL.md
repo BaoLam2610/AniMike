@@ -12,6 +12,11 @@ version: 1.0.0
 
 Phong cách: **dark anime-style** — nền tối, ảnh cover làm chủ đạo, accent neon. Tham khảo cảm giác của AniList/Crunchyroll nhưng có bản sắc riêng.
 
+Từ MVP 3 (2026-07): layout/component học theo **kit Animax** (ảnh export tại `docs/UI/` trong
+repo — nguồn tham chiếu chính khi làm UI), nhưng **giữ accent tím** làm bản sắc riêng thay vì
+xanh lá của kit (quyết định của user 2026-07-04). Khi kit và tokens ở đây lệch nhau về màu →
+tokens ở đây thắng; về layout/bố cục → kit thắng.
+
 ## Nguyên tắc chung
 
 1. **Ảnh là nhân vật chính** — cover art chiếm diện tích lớn, UI lùi về sau (nền tối, chữ gọn)
@@ -30,7 +35,7 @@ Phong cách: **dark anime-style** — nền tối, ảnh cover làm chủ đạo
 | `surfaceVariant` | `#1E2530` | Chip, search field, nền phụ |
 | `primary` | `#8B5CF6` | Accent chính (tím) — nút, tab active, link |
 | `secondary` | `#F471B5` | Accent phụ (hồng) — badge, favorite |
-| `tertiary` | `#38BDF8` | Info (xanh cyan) — score, airing status |
+| `tertiary` | `#38BDF8` | Info (xanh cyan) — airing status, score badge ở Detail hero header (không dùng cho AnimeCard, xem mục Score badge) |
 | `onBackground` | `#E5E9F0` | Chữ chính |
 | `onSurfaceVariant` | `#8B93A7` | Chữ phụ, caption, icon inactive |
 | `error` | `#F87171` | Lỗi |
@@ -62,7 +67,8 @@ Title anime trên card: tối đa 2 dòng, ellipsis.
 
 ### AnimeCard (dọc — dùng trong LazyRow/Grid)
 - Kích thước ảnh: tỉ lệ **2:3**, bo góc 12dp, rộng 120dp (row) hoặc fill (grid 3 cột)
-- Dưới ảnh: title (2 dòng) + hàng meta: score (★ màu `tertiary`) · year
+- Score badge đè **góc trên-trái ảnh** (padding 8dp) — xem mục Score badge
+- Dưới ảnh: title (2 dòng) + year (`labelSmall`, `onSurfaceVariant`)
 - Loading: shimmer placeholder màu `surfaceVariant`
 
 ### Detail header
@@ -71,7 +77,13 @@ Title anime trên card: tối đa 2 dòng, ellipsis.
 - Nút favorite: icon trái tim, active = `secondary`
 
 ### Score badge
-- Nền `surface` alpha 80%, icon ★ + số 1 chữ số thập phân (VD "8.7"), chữ `tertiary`
+Có 2 style tùy ngữ cảnh — **cả hai đều ẩn hẳn khi không có score** (mapper trả `"N/A"`),
+không hiện "N/A" ở bất kỳ đâu:
+- **Trên AnimeCard** (card dọc LazyRow/Grid): nền `primary`, bo góc 8dp, chữ `onPrimary`
+  `labelSmall`, số 1 chữ số thập phân (VD "8.7"), đè góc trên-trái ảnh cover (theo kit Animax)
+- **Trên Detail hero header**: nền `surface` alpha 80% (đè trực tiếp lên ảnh cover, cần độ
+  trong suốt để không che ảnh), icon ★ + chữ `tertiary` `labelLarge` — khác AnimeCard vì đây
+  là badge nổi trên ảnh lớn cùng hàng với pill "Airing", không phải góc card nhỏ
 
 ### Trạng thái UI
 - Loading: shimmer, KHÔNG dùng CircularProgressIndicator giữa màn hình trừ lần tải đầu
@@ -80,6 +92,10 @@ Title anime trên card: tối đa 2 dòng, ellipsis.
 
 ### Bottom navigation
 - 3-4 tab: Home, Search, Favorites (+ Seasons). Icon outline khi inactive (`onSurfaceVariant`), filled + `primary` khi active. Nền `surface`
+
+### Splash
+- Dùng `androidx.core:core-splashscreen` (compat về minSdk 24): nền `background`, logo
+  `ic_splash_logo` (chevron "A" + chấm, màu `primary`), không text/loader — hệ thống tự dismiss
 
 ## Mapping vào Compose
 

@@ -12,11 +12,21 @@ data class AnimeDto(
     val score: Double? = null,
     val year: Int? = null,
     val type: String? = null,
+    val episodes: Int? = null,
+    val broadcast: BroadcastDto? = null,
 )
 
 @Serializable
 data class ImagesDto(
     val jpg: ImageUrlsDto? = null,
+)
+
+// Field có mặt trong response của mọi endpoint list (không riêng /schedules)
+// vì cùng 1 anime resource — hiện chỉ ScheduledAnimeMapper đọc, mapper khác
+// (AnimeMapper, RecommendationMapper...) chủ động bỏ qua vì không cần.
+@Serializable
+data class BroadcastDto(
+    val time: String? = null,
 )
 
 @Serializable

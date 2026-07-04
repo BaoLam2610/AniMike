@@ -4,6 +4,8 @@ import androidx.compose.runtime.Immutable
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
+import com.lambao.animike.domain.model.AnimeReview
+import com.lambao.animike.domain.model.Episode
 
 @Immutable
 data class DetailState(
@@ -12,6 +14,8 @@ data class DetailState(
     val error: String? = null,
     val characters: List<AnimeCharacter> = emptyList(),
     val recommendations: List<Anime> = emptyList(),
+    val episodes: List<Episode> = emptyList(),
+    val reviews: List<AnimeReview> = emptyList(),
     val isFavorite: Boolean = false,
 )
 

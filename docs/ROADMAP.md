@@ -108,26 +108,48 @@ Nguyên tắc: mỗi MVP là một đợt nhỏ, **xong hẳn (build + review + 
 - [x] Pull-to-refresh trên Home (bỏ qua TTL)
 - [x] Season Archive (`/seasons/{year}/{season}`, `/seasons`) — làm sớm hơn kế hoạch, đã qua compose-reviewer
 
-### MVP 2 (Phase 4) — Chốt v1 (3-5 ngày) ← ĐANG LÀM
+### MVP 2 (Phase 4) — Chốt v1 ✅ phần tính năng (2026-07)
 - [x] Lịch chiếu theo thứ (`/schedules`) — gộp chung tab "Duyệt" với Season Archive qua
   segmented control (giữ đúng giới hạn 3-4 tab của `animike-design` SKILL.md), mặc định
   chọn đúng thứ hôm nay
-- [ ] Icon app, splash screen, review lại dark mode
-- [ ] Test trên nhiều kích thước màn hình; release build (minify + ProGuard rules cho Retrofit/serialization)
+- Icon app / splash / release build: **hoãn** — dự án cá nhân chưa cần publish, dồn
+  splash vào MVP 3 UI-1, release build để khi nào thực sự cần cài lâu dài
 
-### MVP 3 — Nâng cấp UI hướng streaming-app (tham khảo kit Figma Animax)
-Cần user export ảnh các màn hình chính từ kit Figma trước khi bắt đầu (Figma MCP hết quota).
-- [ ] Hero carousel ở Home (anime nổi bật, ảnh lớn)
-- [ ] Detail chia tab: Tổng quan / Tập (`/anime/{id}/episodes`) / Liên quan
-- [ ] Nút "Xem trên..." — streaming platform links (`/anime/{id}/streaming`)
-- [ ] Tab media: trailer/PV/promo (`/anime/{id}/videos`)
-- [ ] Polish motion/transition giữa các màn hình
+### MVP 3 — Nâng cấp UI theo kit Animax ← ĐANG LÀM
+Ảnh tham chiếu đã export tại `docs/UI/` (27 màn, đặt tên `{số}_{Dark|Light}_{tên màn}.png`)
+— **không cần mockup riêng nữa, ảnh kit chính là mockup**. Đánh giá khả thi so với Jikan:
+làm giống được ~80%; không làm được Play/Download video (Jikan chỉ có metadata — xem
+FEATURES.md mục 4), Profile không có account nhưng làm được dạng Settings + thống kê local.
+
+Triển khai lần lượt từng đợt, mỗi đợt: code → build → compose-reviewer → user commit:
+- [ ] **UI-1: Tokens + AnimeCard + Splash** — chốt accent (xanh lá theo kit vs giữ tím),
+  score badge góc trên-trái card (nền accent, chữ trắng), cập nhật `animike-design`
+  SKILL.md + `Color.kt`/`Dimens.kt`, splash logo đơn giản. Ref: `1_Dark_splash`, card trong `21/22/45`
+- [ ] **UI-2: Home** — hero header full-bleed + gradient + nút hành động (Trailer/My List
+  thay cho Play), section "Top Hits" có số thứ hạng đè trên card, top bar icon search.
+  Cân nhắc bỏ tab Search (vào search từ Home như kit). Ref: `21_Dark_home`, `22_Dark_top hits`
+- [ ] **UI-3: Release Calendar** — tách Schedules ra tab riêng kiểu kit: chip ngày kèm số
+  (T2 20, T3 21...), group theo giờ chiếu (`broadcast.time` có sẵn trong `/schedules`),
+  vạch "giờ hiện tại". Ref: `30/31_Dark_release calendar`
+- [ ] **UI-4: Detail** — hero + meta chips (score, năm, rating tuổi), nút Trailer, section
+  Episodes (`/anime/{id}/episodes` — không có thumbnail per-episode), tab More Like This /
+  Reviews (`/anime/{id}/reviews`). Ref: `32-42_Dark_anime episode details`
+- [ ] **UI-5: My List** — Favorites → grid 2 cột poster lớn + score badge, đổi tên tab.
+  Ref: `44/45_Dark_my list`
+- [ ] **UI-6: Search + Sort & Filter** — màn filter full-screen (Sort/Categories/Genre/
+  Year + Reset/Apply) thay 2 hàng chip. Ref: `25-29_Dark_search`, `28_Dark_sort & filter`
+- [ ] Polish motion/transition giữa các màn hình (sau cùng, khi các màn đã ổn định)
+
+Tính năng mở rộng Detail (từng nằm ở MVP 3 cũ, chuyển sang MVP 4 vì thuộc nhóm dữ liệu mới):
+nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`)
 
 ### MVP 4 — Khám phá
 - [ ] Random anime "Hôm nay xem gì?" (`/random/anime`)
-- [ ] Tập mới phát hành + promo mới (`/watch/episodes`, `/watch/promos`)
+- [ ] Tập mới phát hành + promo mới (`/watch/episodes`, `/watch/promos`) — khớp section
+  "New Episode Releases" trên Home của kit Animax
 - [ ] Đề xuất cộng đồng (`/recommendations/anime`)
 - [ ] Biểu đồ phân bố điểm + số người xem (`/anime/{id}/statistics`), nhạc OP/ED (`/anime/{id}/themes`)
+- [ ] Nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`) — chuyển từ MVP 3 cũ
 
 ### MVP 5 — Nhân vật / Người / Studio
 - [ ] Top nhân vật (`/top/characters`), trang nhân vật (`/characters/{id}/full`)
