@@ -27,6 +27,10 @@ data class AnimeFullDto(
 @Serializable
 data class TrailerDto(
     @SerialName("youtube_id") val youtubeId: String? = null,
+    // youtube_id đôi khi null dù trailer tồn tại (data quirk — VD anime 38524
+    // chỉ có embed_url) — giữ cả 2 URL để mapper rút id làm fallback.
+    val url: String? = null,
+    @SerialName("embed_url") val embedUrl: String? = null,
 )
 
 @Serializable

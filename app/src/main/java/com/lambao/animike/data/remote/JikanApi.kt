@@ -5,6 +5,7 @@ import com.lambao.animike.data.remote.dto.AnimeFullDto
 import com.lambao.animike.data.remote.dto.CharacterEntryDto
 import com.lambao.animike.data.remote.dto.EpisodeDto
 import com.lambao.animike.data.remote.dto.GenreDto
+import com.lambao.animike.data.remote.dto.ImagesDto
 import com.lambao.animike.data.remote.dto.JikanListResponse
 import com.lambao.animike.data.remote.dto.JikanResponse
 import com.lambao.animike.data.remote.dto.RecommendationEntryDto
@@ -44,13 +45,22 @@ interface JikanApi {
     @GET("anime/{id}/recommendations")
     suspend fun getRecommendations(@Path("id") id: Int): JikanListResponse<RecommendationEntryDto>
 
-    // Chỉ lấy page 1 (100 tập/trang) — đủ cho đa số anime, MVP chưa cần phân
-    // trang tập (xem AnimeDetailRepository.getEpisodes).
-    @GET("anime/{id}/episodes")
+    // /videos/episodes (KHÔNG phải /episodes) — có thumbnail + trả sẵn thứ tự
+    // mới nhất trước, đúng thứ tự muốn hiển thị (xem comment ở EpisodeDto).
+    // Dùng ở 2 nơi: AnimeDetailRepository.getEpisodes() gọi 1 lần page=1 cho
+    // preview 10 tập trong Detail; AnimeEpisodesPagingSource gọi phân trang
+    // đầy đủ cho EpisodesScreen ("Xem tất cả") — 2 request page=1 riêng biệt
+    // khi mở "Xem tất cả" từ Detail (không share cache, chấp nhận cho MVP).
+    @GET("anime/{id}/videos/episodes")
     suspend fun getEpisodes(@Path("id") id: Int, @Query("page") page: Int = 1): JikanListResponse<EpisodeDto>
 
     @GET("anime/{id}/reviews")
     suspend fun getReviews(@Path("id") id: Int, @Query("page") page: Int = 1): JikanListResponse<ReviewDto>
+
+    // Mỗi item chỉ là {jpg, webp} — trùng đúng shape ImagesDto, không cần DTO
+    // riêng. Không phân trang (đã verify qua curl, ~10-50 ảnh/anime).
+    @GET("anime/{id}/pictures")
+    suspend fun getPictures(@Path("id") id: Int): JikanListResponse<ImagesDto>
 
     @GET("anime")
     suspend fun searchAnime(
@@ -61,6 +71,8 @@ interface JikanApi {
         @Query("genres") genres: String? = null,
         @Query("order_by") orderBy: String? = null,
         @Query("sort") sort: String? = null,
+        @Query("start_date") startDate: String? = null,
+        @Query("end_date") endDate: String? = null,
     ): JikanListResponse<AnimeDto>
 
     @GET("genres/anime")

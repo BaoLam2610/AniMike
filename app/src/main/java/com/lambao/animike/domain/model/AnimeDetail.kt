@@ -19,7 +19,14 @@ data class AnimeDetail(
     val genres: List<String>,
     val synopsis: String,
     val relations: List<RelationGroup>,
-)
+) {
+    // Thumbnail trailer derive từ video id theo pattern công khai của YouTube
+    // (hqdefault luôn tồn tại; 4:3 có thể kèm letterbox — UI crop khung 16:9
+    // sẽ tự cắt bỏ bar đen). Derive thay vì lưu trailer.images từ API để khỏi
+    // thêm cột vào Room cache (CachedAnimeDetailEntity) chỉ vì 1 URL suy ra được.
+    val trailerThumbnailUrl: String?
+        get() = trailerYoutubeId?.let { "https://img.youtube.com/vi/$it/hqdefault.jpg" }
+}
 
 @Immutable
 data class RelationGroup(

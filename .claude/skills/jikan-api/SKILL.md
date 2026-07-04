@@ -31,7 +31,7 @@ Base URL: `https://api.jikan.moe/v4` — không cần API key, **chỉ đọc** 
 | Tìm kiếm | `GET /anime?q=&page=&type=&status=&rating=&min_score=&genres=&order_by=&sort=` |
 | Chi tiết | `GET /anime/{id}/full` |
 | Nhân vật | `GET /anime/{id}/characters` |
-| Tập | `GET /anime/{id}/episodes?page=` |
+| Tập | `GET /anime/{id}/videos/episodes?page=` (có thumbnail, sắp mới→cũ; KHÔNG dùng `/anime/{id}/episodes` — endpoint đó không có ảnh, sắp cũ→mới; đánh đổi: `/videos/episodes` chỉ phủ tập có video/promo, anime rất dài như One Piece có thể thiếu vài chục tập đầu quá cũ) |
 | Đề xuất | `GET /anime/{id}/recommendations` |
 | Reviews | `GET /anime/{id}/reviews?page=` |
 | Ảnh | `GET /anime/{id}/pictures` |

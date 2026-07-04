@@ -5,38 +5,33 @@ import androidx.paging.PagingState
 import com.lambao.animike.data.remote.JikanApi
 import com.lambao.animike.domain.mapper.toDomain
 import com.lambao.animike.domain.model.Anime
-import com.lambao.animike.domain.model.SearchFilters
+import com.lambao.animike.domain.model.AnimeListSource
 import retrofit2.HttpException
 import java.io.IOException
 
 /**
- * Chỉ bắt HttpException/IOException — không catch(Exception) rộng, đúng
- * anti-pattern list trong compose-expert/references/paging-mvi-testing.md
- * ("Hides real bugs as recoverable errors").
+ * Paging cho màn "Xem tất cả" của Top Hits / Sắp chiếu từ Home. Chỉ bắt
+ * HttpException/IOException — không catch(Exception) rộng (quy ước
+ * compose-expert/references/paging-mvi-testing.md).
  */
-class AnimeSearchPagingSource(
+class AnimeListPagingSource(
     private val api: JikanApi,
-    private val query: String,
-    private val filters: SearchFilters,
+    private val source: AnimeListSource,
 ) : PagingSource<Int, Anime>() {
+
+    // Khử trùng mal_id XUYÊN trang (Jikan /top/anime hay trả trùng giữa các
+    // trang) — field instance an toàn vì mỗi lần Pager refresh sẽ tạo
+    // PagingSource mới, set tự reset (cùng pattern AnimeEpisodesPagingSource).
+    private val seenIds = mutableSetOf<Int>()
 
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, Anime> {
         val page = params.key ?: 1
         return try {
-            val response = api.searchAnime(
-                // query rỗng -> gửi null để Retrofit bỏ hẳn tham số q= (khác với
-                // q= rỗng) — Jikan mới trả danh sách chung theo order_by/sort.
-                query = query.ifBlank { null },
-                page = page,
-                type = filters.type,
-                status = filters.status,
-                genres = filters.genreIds.takeIf { it.isNotEmpty() }?.joinToString(","),
-                orderBy = filters.orderBy,
-                sort = filters.sort,
-                startDate = filters.year?.let { "$it-01-01" },
-                endDate = filters.year?.let { "$it-12-31" },
-            )
-            val anime = response.data.map { it.toDomain() }.distinctBy { it.malId }
+            val response = when (source) {
+                AnimeListSource.TOP -> api.getTopAnime(page)
+                AnimeListSource.UPCOMING -> api.getUpcoming(page)
+            }
+            val anime = response.data.map { it.toDomain() }.filter { seenIds.add(it.malId) }
             LoadResult.Page(
                 data = anime,
                 prevKey = if (page == 1) null else page - 1,

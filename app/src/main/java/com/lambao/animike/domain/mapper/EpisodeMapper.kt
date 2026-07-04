@@ -6,6 +6,5 @@ import com.lambao.animike.domain.model.Episode
 fun EpisodeDto.toDomain(): Episode = Episode(
     number = malId,
     title = title ?: "Không rõ tên",
-    isFiller = filler,
-    isRecap = recap,
+    imageUrl = images?.jpg?.largeImageUrl ?: images?.jpg?.imageUrl,
 )

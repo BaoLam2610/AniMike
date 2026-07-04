@@ -3,6 +3,13 @@ package com.lambao.animike.ui.detail
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.util.Log
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +19,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,16 +29,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -48,6 +61,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -67,6 +82,9 @@ import androidx.core.net.toUri
 fun DetailScreen(
     onBackClick: () -> Unit,
     onNavigateToDetail: (Int) -> Unit,
+    onNavigateToEpisodes: (Int) -> Unit,
+    onNavigateToCharacters: (Int) -> Unit,
+    onNavigateToReviews: (Int) -> Unit,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -85,6 +103,9 @@ fun DetailScreen(
                 }
 
                 is DetailEffect.NavigateToDetail -> onNavigateToDetail(effect.malId)
+                is DetailEffect.NavigateToEpisodes -> onNavigateToEpisodes(effect.malId)
+                is DetailEffect.NavigateToCharacters -> onNavigateToCharacters(effect.malId)
+                is DetailEffect.NavigateToReviews -> onNavigateToReviews(effect.malId)
             }
         }
     }
@@ -116,23 +137,50 @@ private fun DetailScreenContent(
                     recommendations = state.recommendations,
                     episodes = state.episodes,
                     reviews = state.reviews,
-                    isFavorite = state.isFavorite,
-                    onBackClick = onBackClick,
+                    pictures = state.pictures,
                     onEvent = onEvent,
                 )
 
-                state.isLoading -> LoadingContent(onBackClick)
+                state.isLoading -> LoadingContent()
 
                 state.error != null -> ErrorContent(
                     message = state.error,
-                    onBackClick = onBackClick,
                     onRetry = { onEvent(DetailEvent.OnRetry) },
                 )
 
                 // Lưới an toàn: khoảng hở ngắn giữa lúc refresh xong (isLoading=false)
                 // và lúc Flow từ Room re-emit detail — không để màn trắng thoáng qua.
-                else -> LoadingContent(onBackClick)
+                else -> LoadingContent()
             }
+
+            // Neo cố định back/favorite trên cùng, KHÔNG đặt trong HeroHeader
+            // (trước đây nằm trong LazyColumn's item nên cuộn mất theo nội
+            // dung) — đặt ở đây, là sibling của LazyColumn trong Box này, nên
+            // luôn nổi trên cùng bất kể cuộn tới đâu hay đang ở state nào.
+            TopBar(
+                isFavorite = state.isFavorite,
+                showFavorite = state.detail != null,
+                onBackClick = onBackClick,
+                onFavoriteClick = { onEvent(DetailEvent.OnFavoriteClick) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopBar(isFavorite: Boolean, showFavorite: Boolean, onBackClick: () -> Unit, onFavoriteClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(Dimens.SpaceSm),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        BackButton(onClick = onBackClick)
+        // Luôn render đủ 2 slot (Spacer cùng kích thước khi chưa có favorite)
+        // để Back không bị lệch vị trí phụ thuộc vào Arrangement.SpaceBetween
+        // xử lý trường hợp 1-vs-2 con khác nhau.
+        if (showFavorite) {
+            FavoriteButton(isFavorite = isFavorite, onClick = onFavoriteClick)
+        } else {
+            Spacer(Modifier.size(Dimens.IconButtonSize))
         }
     }
 }
@@ -144,19 +192,11 @@ private fun DetailContent(
     recommendations: List<Anime>,
     episodes: List<Episode>,
     reviews: List<AnimeReview>,
-    isFavorite: Boolean,
-    onBackClick: () -> Unit,
+    pictures: List<String>,
     onEvent: (DetailEvent) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
-        item {
-            HeroHeader(
-                detail = detail,
-                isFavorite = isFavorite,
-                onBackClick = onBackClick,
-                onFavoriteClick = { onEvent(DetailEvent.OnFavoriteClick) },
-            )
-        }
+        item { HeroHeader(detail = detail) }
 
         if (detail.genres.isNotEmpty()) {
             item { GenreChips(genres = detail.genres) }
@@ -164,28 +204,42 @@ private fun DetailContent(
 
         if (detail.trailerYoutubeId != null) {
             item {
-                Button(
+                TrailerCard(
+                    thumbnailUrl = detail.trailerThumbnailUrl,
                     onClick = { onEvent(DetailEvent.OnTrailerClick) },
-                    modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
-                ) {
-                    Text("Xem trailer")
-                }
+                )
             }
         }
 
         item { SynopsisSection(synopsis = detail.synopsis) }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
-        item { EpisodesSection(episodes = episodes) }
+        item {
+            EpisodesSection(
+                episodes = episodes,
+                onSeeAllClick = { onEvent(DetailEvent.OnSeeAllEpisodesClick) },
+            )
+        }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
-        item { CharactersSection(characters = characters) }
+        item {
+            CharactersSection(
+                characters = characters,
+                onSeeAllClick = { onEvent(DetailEvent.OnSeeAllCharactersClick) },
+            )
+        }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
         item { RelationsSection(relations = detail.relations) }
+        item { Spacer(Modifier.height(Dimens.SpaceLg)) }
+        // "Hình ảnh" đặt sau nhóm thông tin về chính bộ phim (tập/nhân vật/
+        // liên quan), trước nhóm khám phá (Đề xuất/Đánh giá) — tính năng phát
+        // sinh ngoài kit Animax, xem docs/ROADMAP.md MVP3.
+        item { PicturesSection(pictures = pictures) }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
         item {
             RecommendationsOrReviewsSection(
                 recommendations = recommendations,
                 reviews = reviews,
                 onRecommendationClick = { onEvent(DetailEvent.OnRecommendationClick(it)) },
+                onSeeAllReviewsClick = { onEvent(DetailEvent.OnSeeAllReviewsClick) },
             )
         }
         item { Spacer(Modifier.height(Dimens.SpaceXl)) }
@@ -193,12 +247,7 @@ private fun DetailContent(
 }
 
 @Composable
-private fun HeroHeader(
-    detail: AnimeDetail,
-    isFavorite: Boolean,
-    onBackClick: () -> Unit,
-    onFavoriteClick: () -> Unit,
-) {
+private fun HeroHeader(detail: AnimeDetail) {
     // ColorPainter không override equals() — remember để tránh AsyncImage coi
     // placeholder/error/fallback là "đổi" ở mỗi recomposition.
     val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
@@ -225,12 +274,8 @@ private fun HeroHeader(
                     ),
                 ),
         )
-        BackButton(onClick = onBackClick, modifier = Modifier.align(Alignment.TopStart).padding(Dimens.SpaceSm))
-        FavoriteButton(
-            isFavorite = isFavorite,
-            onClick = onFavoriteClick,
-            modifier = Modifier.align(Alignment.TopEnd).padding(Dimens.SpaceSm),
-        )
+        // Back/Favorite giờ neo cố định ở DetailScreenContent.TopBar (nổi trên
+        // toàn màn hình, không cuộn theo), không render lại ở đây nữa.
 
         Column(
             modifier = Modifier
@@ -340,49 +385,127 @@ private fun GenreChips(genres: List<String>) {
     }
 }
 
+// Thay nút text "Xem trailer" cũ bằng card thumbnail 16:9 + play overlay —
+// vị trí tương ứng nút "Play" pill trong kit (32_Dark_anime episode details):
+// trailer là nội dung video duy nhất app có (Jikan không có video tập phim,
+// xem FEATURES.md mục 4), nên nó xứng đáng ngôn ngữ hình ảnh của một video.
+@Composable
+private fun TrailerCard(thumbnailUrl: String?, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm)
+            .aspectRatio(16f / 9f)
+            .clip(RoundedCornerShape(Dimens.RadiusCard))
+            .clickable(onClickLabel = "Xem trailer", onClick = onClick),
+    ) {
+        val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
+        val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
+        AsyncImage(
+            model = thumbnailUrl,
+            // Trang trí — hành động đã có onClickLabel + label "Xem trailer" bên dưới.
+            contentDescription = null,
+            // Crop: thumbnail hqdefault là 4:3 kèm letterbox, crop vào khung
+            // 16:9 sẽ tự cắt bỏ 2 bar đen trên/dưới.
+            contentScale = ContentScale.Crop,
+            placeholder = placeholderPainter,
+            error = placeholderPainter,
+            fallback = placeholderPainter,
+            modifier = Modifier.fillMaxSize(),
+        )
+        // Scrim nhẹ để play button + label luôn nổi trên mọi thumbnail sáng/tối.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.3f)),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .size(Dimens.IconButtonSize)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "▶",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
+        }
+        Text(
+            text = "Xem trailer",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(Dimens.SpaceMd),
+        )
+    }
+}
+
 @Composable
 private fun SynopsisSection(synopsis: String) {
-    var expanded by remember { mutableStateOf(false) }
     Column(modifier = Modifier.padding(horizontal = Dimens.ScreenPadding)) {
         Text(
             text = "Nội dung",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
         )
-        Text(
+        ExpandableText(
             text = synopsis,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = if (expanded) Int.MAX_VALUE else 4,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = Dimens.SpaceXs),
-        )
-        Text(
-            text = if (expanded) "Thu gọn" else "Xem thêm",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .padding(top = Dimens.SpaceXs)
-                .clickable { expanded = !expanded },
+            maxCollapsedLines = 4,
         )
     }
 }
 
+// Chỉ preview CHARACTERS_PREVIEW_LIMIT nhân vật đầu — /characters trả về
+// TOÀN BỘ nhân vật 1 lần (không phân trang), anime dài có thể tới hàng nghìn
+// (One Piece ~1477). "Xem tất cả" mở CharactersScreen riêng (Routes.CHARACTERS)
+// có ô tìm kiếm local (lọc trong bộ nhớ, không cần gọi lại API).
+private const val CHARACTERS_PREVIEW_LIMIT = 15
+
+// AnimatedVisibility thay vì `if (characters.isEmpty()) return` — characters
+// fetch xong SAU detail (gọi tuần tự trong DetailViewModel.loadAll), nên
+// section này "mọc" ra giữa chừng khi đang xem màn; animate cho mượt thay vì
+// giật cứng.
 @Composable
-private fun CharactersSection(characters: List<AnimeCharacter>) {
-    if (characters.isEmpty()) return
-    Column {
-        Text(
-            text = "Nhân vật & Seiyuu",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(horizontal = Dimens.ScreenPadding),
-        )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
-        ) {
-            items(characters, key = { it.malId }) { character -> CharacterItem(character) }
+private fun CharactersSection(characters: List<AnimeCharacter>, onSeeAllClick: () -> Unit) {
+    AnimatedVisibility(visible = characters.isNotEmpty()) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Dimens.ScreenPadding),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Nhân vật & Seiyuu",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                if (characters.size > CHARACTERS_PREVIEW_LIMIT) {
+                    Text(
+                        text = "Xem tất cả",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clickable(onClick = onSeeAllClick)
+                            .padding(Dimens.SpaceXs),
+                    )
+                }
+            }
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
+            ) {
+                items(
+                    characters.take(CHARACTERS_PREVIEW_LIMIT),
+                    key = { it.malId },
+                ) { character -> CharacterItem(character) }
+            }
         }
     }
 }
@@ -408,75 +531,108 @@ private fun CharacterItem(character: AnimeCharacter) {
             text = character.name,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onBackground,
+            // minLines = maxLines = 2: luôn chiếm đúng 2 dòng dù tên thực tế
+            // dài 1 hay 2 dòng — tránh item "nhấp nhô" cao thấp khác nhau
+            // trong cùng 1 hàng LazyRow (cùng lý do với EpisodeItem bên dưới).
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = Dimens.SpaceXs),
         )
-        character.voiceActorName?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-            )
-        }
+        // Luôn render dòng này (rỗng nếu không có seiyuu) để mọi item cùng
+        // chiều cao — không dùng voiceActorName?.let {} nữa (ẩn/hiện có điều
+        // kiện chính là nguyên nhân nhấp nhô).
+        Text(
+            text = character.voiceActorName ?: "",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
-// Không có thumbnail per-episode từ Jikan (/anime/{id}/episodes chỉ trả
-// title/aired/filler/recap) — chỉ page 1 (100 tập), đủ cho đa số anime.
+// Chỉ preview EPISODES_PREVIEW_LIMIT tập đầu trong list ngang — anime dài có
+// thể có hàng chục/trăm tập, hiện hết ở LazyRow là UX tệ. "Xem tất cả" mở màn
+// EpisodesScreen riêng (Routes.EPISODES) hiện đủ danh sách đã fetch.
+private const val EPISODES_PREVIEW_LIMIT = 10
+
+// AnimatedVisibility thay vì early return — cùng lý do với CharactersSection
+// (episodes fetch xong sau detail, "mọc" ra giữa chừng khi đang xem màn).
 @Composable
-private fun EpisodesSection(episodes: List<Episode>) {
-    if (episodes.isEmpty()) return
-    Column {
-        Text(
-            text = "Các tập",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(horizontal = Dimens.ScreenPadding),
-        )
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
-        ) {
-            items(episodes, key = { it.number }) { episode -> EpisodeItem(episode) }
+private fun EpisodesSection(episodes: List<Episode>, onSeeAllClick: () -> Unit) {
+    AnimatedVisibility(visible = episodes.isNotEmpty()) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Dimens.ScreenPadding),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Các tập",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                if (episodes.size > EPISODES_PREVIEW_LIMIT) {
+                    Text(
+                        text = "Xem tất cả",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clickable(onClick = onSeeAllClick)
+                            .padding(Dimens.SpaceXs),
+                    )
+                }
+            }
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+            ) {
+                items(episodes.take(EPISODES_PREVIEW_LIMIT), key = { it.number }) { episode -> EpisodeItem(episode) }
+            }
         }
     }
 }
 
 @Composable
 private fun EpisodeItem(episode: Episode) {
-    Column(
-        modifier = Modifier
-            .width(Dimens.EpisodeCardWidth)
-            .clip(RoundedCornerShape(Dimens.RadiusCard))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(Dimens.SpaceMd),
-    ) {
+    val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
+    val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
+
+    Column(modifier = Modifier.width(Dimens.EpisodeCardWidth)) {
+        AsyncImage(
+            model = episode.imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            placeholder = placeholderPainter,
+            error = placeholderPainter,
+            fallback = placeholderPainter,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(Dimens.RadiusCard)),
+        )
         Text(
             text = "Tập ${episode.number}",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = Dimens.SpaceXs),
         )
         Text(
             text = episode.title,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onBackground,
+            // minLines = maxLines = 2: luôn chiếm đúng 2 dòng dù title thực tế
+            // dài 1 hay 2 dòng — tránh card "nhấp nhô" cao thấp khác nhau trong
+            // cùng 1 hàng LazyRow.
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = Dimens.SpaceXs),
         )
-        if (episode.isFiller || episode.isRecap) {
-            Text(
-                text = if (episode.isFiller) "Filler" else "Recap",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = Dimens.SpaceXs),
-            )
-        }
     }
 }
 
@@ -493,10 +649,162 @@ private fun RelationsSection(relations: List<RelationGroup>) {
             color = MaterialTheme.colorScheme.onBackground,
         )
         relations.forEach { group ->
+            // key(): app dùng stale-while-revalidate — nếu detail.relations đổi
+            // hình dạng giữa các lần refresh nền, remember theo vị trí slot có
+            // thể gán nhầm trạng thái expanded/isOverflowing cũ cho nội dung mới.
+            key(group.relation) {
+                ExpandableText(text = "${group.relation}: ${group.titles.joinToString(", ")}")
+            }
+        }
+    }
+}
+
+// Dùng chung cho Synopsis + từng dòng Relations — thu gọn N dòng + "Xem
+// thêm"/"Thu gọn", nhưng chỉ hiện nút toggle khi text THỰC SỰ tràn quá
+// maxCollapsedLines (onTextLayout + hasVisualOverflow), tránh hiện "Xem thêm"
+// thừa khi nội dung vốn đã đủ ngắn.
+@Composable
+private fun ExpandableText(text: String, modifier: Modifier = Modifier, maxCollapsedLines: Int = 3) {
+    var expanded by remember { mutableStateOf(false) }
+    var isOverflowing by remember { mutableStateOf(false) }
+    // animateContentSize(): chiều cao Column đổi mượt khi maxLines đổi (thay
+    // vì "giật" cứng) lúc bấm Xem thêm/Thu gọn.
+    Column(modifier = modifier.animateContentSize()) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = if (expanded) Int.MAX_VALUE else maxCollapsedLines,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { result -> if (!expanded) isOverflowing = result.hasVisualOverflow },
+        )
+        if (isOverflowing) {
             Text(
-                text = "${group.relation}: ${group.titles.joinToString(", ")}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = if (expanded) "Thu gọn" else "Xem thêm",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .padding(top = Dimens.SpaceXs)
+                    .clickable { expanded = !expanded },
+            )
+        }
+    }
+}
+
+// Bộ sưu tập ảnh từ /pictures (poster art các thời kỳ) — tính năng phát sinh
+// ngoài kit Animax, không có mockup: LazyRow poster 2:3 (khớp AnimeCard),
+// bấm ảnh mở viewer full-screen vuốt ngang. AnimatedVisibility vì pictures
+// là lệnh gọi phụ cuối cùng, "mọc" ra sau khi detail đã hiển thị.
+@Composable
+private fun PicturesSection(pictures: List<String>) {
+    // Index ảnh đang mở trong viewer, null = viewer đóng — state thuần UI
+    // (giống expanded của ExpandableText), không cần đưa vào DetailState.
+    // rememberSaveable: giữ viewer mở đúng ảnh khi xoay màn hình. Đặt NGOÀI
+    // AnimatedVisibility để lifecycle viewer không phụ thuộc animation ẩn/hiện.
+    var viewerIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+
+    AnimatedVisibility(visible = pictures.isNotEmpty()) {
+        Column {
+            SectionTitle("Hình ảnh")
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
+            ) {
+                itemsIndexed(pictures, key = { _, url -> url }) { index, url ->
+                    val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
+                    val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
+                    AsyncImage(
+                        model = url,
+                        contentDescription = "Ảnh ${index + 1}",
+                        contentScale = ContentScale.Crop,
+                        placeholder = placeholderPainter,
+                        error = placeholderPainter,
+                        fallback = placeholderPainter,
+                        modifier = Modifier
+                            .width(Dimens.CardWidth)
+                            .aspectRatio(2f / 3f)
+                            .clip(RoundedCornerShape(Dimens.RadiusCard))
+                            .clickable(onClickLabel = "Xem ảnh lớn") { viewerIndex = index },
+                    )
+                }
+            }
+        }
+    }
+
+    // Guard pictures.isNotEmpty + coerceIn: sau process death, viewerIndex
+    // được rememberSaveable khôi phục TRƯỚC khi pictures fetch lại xong —
+    // không guard sẽ mở viewer rỗng / index vượt biên trong lúc chờ.
+    val index = viewerIndex
+    if (index != null && pictures.isNotEmpty()) {
+        PictureViewerDialog(
+            pictures = pictures,
+            initialPage = index.coerceIn(0, pictures.lastIndex),
+            onDismiss = { viewerIndex = null },
+        )
+    }
+}
+
+@Composable
+private fun PictureViewerDialog(pictures: List<String>, initialPage: Int, onDismiss: () -> Unit) {
+    // usePlatformDefaultWidth = false: dialog chiếm trọn màn hình cho viewer
+    // ảnh, thay vì bị bó trong khung dialog mặc định.
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+        ) {
+            val pagerState = rememberPagerState(initialPage = initialPage) { pictures.size }
+            val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
+            val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                // Preload trang kề: ảnh large nặng, không preload thì mỗi lần
+                // vuốt user phải nhìn placeholder chờ tải từ đầu.
+                beyondViewportPageCount = 1,
+                key = { pictures[it] },
+            ) { page ->
+                AsyncImage(
+                    model = pictures[page],
+                    contentDescription = "Ảnh ${page + 1}",
+                    // Fit (không Crop): viewer phải thấy TRỌN ảnh gốc, đây là
+                    // mục đích của việc phóng to.
+                    contentScale = ContentScale.Fit,
+                    placeholder = placeholderPainter,
+                    error = placeholderPainter,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(Dimens.ScreenPadding),
+                )
+            }
+
+            // Nút đóng — cùng ngôn ngữ hình ảnh với BackButton (tròn, nền mờ).
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(Dimens.SpaceSm)
+                    .size(Dimens.IconButtonSize)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
+                    .clickable(onClick = onDismiss)
+                    .semantics { contentDescription = "Đóng" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "✕",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+
+            Text(
+                text = "${pagerState.currentPage + 1}/${pictures.size}",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(Dimens.ScreenPadding),
             )
         }
     }
@@ -513,29 +821,47 @@ private fun RecommendationsOrReviewsSection(
     recommendations: List<Anime>,
     reviews: List<AnimeReview>,
     onRecommendationClick: (Int) -> Unit,
+    onSeeAllReviewsClick: () -> Unit,
 ) {
-    when {
-        recommendations.isEmpty() && reviews.isEmpty() -> return
-
-        recommendations.isNotEmpty() && reviews.isNotEmpty() -> {
-            var selectedTab by rememberSaveable { mutableStateOf(DetailTab.RECOMMENDATIONS) }
-            Column {
-                DetailTabRow(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
-                when (selectedTab) {
-                    DetailTab.RECOMMENDATIONS -> RecommendationsRow(recommendations, onRecommendationClick)
-                    DetailTab.REVIEWS -> ReviewsList(reviews)
+    // AnimatedVisibility thay vì early return khi cả 2 đều rỗng — cùng lý do
+    // với CharactersSection/EpisodesSection (recommendations/reviews fetch
+    // xong sau detail, "mọc" ra giữa chừng khi đang xem màn).
+    AnimatedVisibility(visible = recommendations.isNotEmpty() || reviews.isNotEmpty()) {
+        when {
+            recommendations.isNotEmpty() && reviews.isNotEmpty() -> {
+                var selectedTab by rememberSaveable { mutableStateOf(DetailTab.RECOMMENDATIONS) }
+                Column {
+                    DetailTabRow(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
+                    // Crossfade khi đổi tab thay vì "nhảy" cứng giữa 2 nội dung
+                    // khác hình dạng (LazyRow vs Column cao thấp khác nhau).
+                    // SizeTransform(clip = false) — nếu không, nội dung cao hơn
+                    // bị cắt trong lúc animate vì AnimatedContent mặc định clip
+                    // theo size nội suy (compose-expert/animation.md mục tab-switch).
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = { fadeIn() togetherWith fadeOut() using SizeTransform(clip = false) },
+                        label = "detail_tab_content",
+                    ) { tab ->
+                        when (tab) {
+                            DetailTab.RECOMMENDATIONS -> RecommendationsRow(recommendations, onRecommendationClick)
+                            DetailTab.REVIEWS -> ReviewsList(reviews, onSeeAllReviewsClick)
+                        }
+                    }
                 }
             }
-        }
 
-        recommendations.isNotEmpty() -> Column {
-            SectionTitle("Đề xuất tương tự")
-            RecommendationsRow(recommendations, onRecommendationClick)
-        }
+            recommendations.isNotEmpty() -> Column {
+                SectionTitle("Đề xuất tương tự")
+                RecommendationsRow(recommendations, onRecommendationClick)
+            }
 
-        else -> Column {
-            SectionTitle("Đánh giá")
-            ReviewsList(reviews)
+            reviews.isNotEmpty() -> Column {
+                SectionTitle("Đánh giá")
+                ReviewsList(reviews, onSeeAllReviewsClick)
+            }
+            // Cả 2 đều rỗng: AnimatedVisibility(visible=false) đã lo phần ẩn,
+            // nhánh này chỉ để tường minh chứ không có gì phải render.
+            else -> Unit
         }
     }
 }
@@ -550,53 +876,30 @@ private fun SectionTitle(text: String) {
     )
 }
 
+// Dùng TabRow/Tab chuẩn Material3 thay vì tự vẽ Row + gạch chân (bản tự vẽ
+// trước đó thiếu track nền + không animate, nhìn "thô") — TabRow tự lo phần
+// đo width chia đều và vẽ indicator trượt mượt giữa 2 tab.
 @Composable
 private fun DetailTabRow(selectedTab: DetailTab, onTabSelected: (DetailTab) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceLg),
+    TabRow(
+        selectedTabIndex = selectedTab.ordinal,
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.primary,
     ) {
-        DetailTabItem(
-            label = "Đề xuất",
-            selected = selectedTab == DetailTab.RECOMMENDATIONS,
-            onClick = { onTabSelected(DetailTab.RECOMMENDATIONS) },
-        )
-        DetailTabItem(
-            label = "Đánh giá",
-            selected = selectedTab == DetailTab.REVIEWS,
-            onClick = { onTabSelected(DetailTab.REVIEWS) },
-        )
-    }
-}
-
-// width(IntrinsicSize.Min) bắt buộc Column đo intrinsic width của Text trước
-// (thay vì chỉ nhận constraint "phần còn lại của Row" từ trên xuống) — nếu bỏ
-// dòng này, Box.fillMaxWidth() bên dưới sẽ fill theo constraint đó (gần hết
-// Row) thay vì theo đúng độ rộng chữ, và item đầu tiên sẽ chiếm hết chỗ của
-// item thứ 2 (Row mặc định không đo theo sibling, xem Modifier.width doc).
-@Composable
-private fun DetailTabItem(label: String, selected: Boolean, onClick: () -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .width(IntrinsicSize.Min)
-            .clickable(onClick = onClick)
-            .padding(vertical = Dimens.SpaceXs),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(Dimens.SpaceXs))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(Dimens.TabIndicatorHeight)
-                .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent),
-        )
+        DetailTab.entries.forEach { tab ->
+            Tab(
+                selected = tab == selectedTab,
+                onClick = { onTabSelected(tab) },
+                text = {
+                    Text(
+                        text = if (tab == DetailTab.RECOMMENDATIONS) "Đề xuất" else "Đánh giá",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                },
+                selectedContentColor = MaterialTheme.colorScheme.primary,
+                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -616,15 +919,29 @@ private fun RecommendationsRow(recommendations: List<Anime>, onClick: (Int) -> U
     }
 }
 
-// reviews đã được giới hạn số lượng ở AnimeDetailRepository.getReviews() —
-// chưa cần phân trang/expand cho MVP.
+// reviews đã bị giới hạn số lượng ở AnimeDetailRepository.getReviews() (chỉ
+// preview) — luôn hiện "Xem tất cả" vì preview luôn bị cắt, khả năng còn thêm
+// review khác qua ReviewsScreen (Paging 3) là gần như chắc chắn.
 @Composable
-private fun ReviewsList(reviews: List<AnimeReview>) {
+private fun ReviewsList(reviews: List<AnimeReview>, onSeeAllClick: () -> Unit) {
     Column(
         modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
         verticalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
     ) {
         reviews.forEach { review -> ReviewCard(review) }
+        // "Xem tất cả" đặt DƯỚI danh sách (khác các section LazyRow ngang có
+        // nút ở header) — với list dọc, đọc hết preview rồi mới tới lời mời
+        // xem thêm thuận mắt hơn.
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            Text(
+                text = "Xem tất cả",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clickable(onClick = onSeeAllClick)
+                    .padding(Dimens.SpaceXs),
+            )
+        }
     }
 }
 
@@ -669,9 +986,8 @@ private fun ReviewCard(review: AnimeReview) {
 }
 
 @Composable
-private fun LoadingContent(onBackClick: () -> Unit) {
+private fun LoadingContent() {
     Box(modifier = Modifier.fillMaxSize()) {
-        BackButton(onClick = onBackClick, modifier = Modifier.align(Alignment.TopStart).padding(Dimens.SpaceSm))
         CircularProgressIndicator(
             modifier = Modifier.align(Alignment.Center),
             color = MaterialTheme.colorScheme.primary,
@@ -680,9 +996,8 @@ private fun LoadingContent(onBackClick: () -> Unit) {
 }
 
 @Composable
-private fun ErrorContent(message: String, onBackClick: () -> Unit, onRetry: () -> Unit) {
+private fun ErrorContent(message: String, onRetry: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize()) {
-        BackButton(onClick = onBackClick, modifier = Modifier.align(Alignment.TopStart).padding(Dimens.SpaceSm))
         Column(
             modifier = Modifier
                 .align(Alignment.Center)

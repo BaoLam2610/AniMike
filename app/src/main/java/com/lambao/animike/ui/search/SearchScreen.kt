@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,6 +23,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +51,7 @@ import com.lambao.animike.ui.theme.Dimens
 fun SearchScreen(
     onBackClick: () -> Unit,
     onNavigateToDetail: (Int) -> Unit,
+    onNavigateToFilter: () -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -66,6 +69,7 @@ fun SearchScreen(
         state = state,
         pagingItems = pagingItems,
         onBackClick = onBackClick,
+        onNavigateToFilter = onNavigateToFilter,
         onEvent = viewModel::onEvent,
     )
 }
@@ -75,6 +79,7 @@ private fun SearchScreenContent(
     state: SearchState,
     pagingItems: LazyPagingItems<Anime>,
     onBackClick: () -> Unit,
+    onNavigateToFilter: () -> Unit,
     onEvent: (SearchEvent) -> Unit,
 ) {
     // contentWindowInsets = 0: AniMikeNavHost đã có Scaffold ngoài tiêu thụ
@@ -98,9 +103,16 @@ private fun SearchScreenContent(
                     onQueryChange = { onEvent(SearchEvent.OnQueryChange(it)) },
                     modifier = Modifier.weight(1f),
                 )
+                // Thay 2 hàng chip cũ (type/status/sort/genre) — mở màn full-screen
+                // "Sắp xếp & Lọc" riêng (kit Animax MVP3 UI-6, Reset/Apply).
+                FilterButton(onClick = onNavigateToFilter)
             }
 
-            FilterRow(filters = state.filters, genres = state.genres, onEvent = onEvent)
+            ActiveFiltersRow(
+                filters = state.filters,
+                genres = state.genres,
+                onChipClick = onNavigateToFilter,
+            )
 
             // Banner lỗi nhẹ khi refresh (đổi query/filter) thất bại nhưng vẫn còn
             // item cũ để hiện — giữ cache cũ hiển thị + báo lỗi nhẹ, không che
@@ -172,76 +184,60 @@ private fun SearchTextField(query: String, onQueryChange: (String) -> Unit, modi
     )
 }
 
+// Hàng chip tóm tắt filter đang áp dụng, ngay dưới thanh search (kit Animax
+// 29_Dark_sort & filter results) — chỉ hiện khi khác mặc định để khỏi chiếm
+// chỗ vô ích; bấm chip nào cũng mở lại màn "Sắp xếp & Lọc" để chỉnh.
 @Composable
-private fun FilterRow(filters: SearchFilters, genres: List<Genre>, onEvent: (SearchEvent) -> Unit) {
-    Column {
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
-            horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
-        ) {
-            item(key = "type_all") {
-                FilterChip(label = "Tất cả", selected = filters.type == null) {
-                    onEvent(SearchEvent.OnTypeFilterChange(null))
-                }
+private fun ActiveFiltersRow(
+    filters: SearchFilters,
+    genres: List<Genre>,
+    onChipClick: () -> Unit,
+) {
+    // remember theo (filters, genres): danh sách nhãn chỉ đổi khi Apply filter
+    // mới hoặc cache genres load xong — không rebuild mỗi lần gõ query.
+    val labels = remember(filters, genres) {
+        buildList {
+            when (filters.orderBy) {
+                "score" -> add("Điểm cao")
+                "start_date" -> add("Mới nhất")
+                // "popularity" là mặc định — không hiện chip cho đỡ rối.
             }
-            item(key = "type_tv") {
-                FilterChip(label = "TV", selected = filters.type == "tv") {
-                    onEvent(SearchEvent.OnTypeFilterChange("tv"))
-                }
+            when (filters.type) {
+                "tv" -> add("TV")
+                "movie" -> add("Movie")
             }
-            item(key = "type_movie") {
-                FilterChip(label = "Movie", selected = filters.type == "movie") {
-                    onEvent(SearchEvent.OnTypeFilterChange("movie"))
-                }
+            // Genre id không có trong cache (chưa load xong) thì bỏ qua nhãn đó
+            // thay vì hiện id thô — cache load xong sẽ tự recompose đủ nhãn.
+            filters.genreIds.forEach { id ->
+                genres.firstOrNull { it.id == id }?.let { add(it.name) }
             }
-            item(key = "status_airing") {
-                FilterChip(label = "Đang chiếu", selected = filters.status == "airing") {
-                    onEvent(SearchEvent.OnStatusFilterChange(if (filters.status == "airing") null else "airing"))
-                }
-            }
-            item(key = "sort_popular") {
-                FilterChip(label = "Phổ biến", selected = filters.orderBy == "popularity") {
-                    onEvent(SearchEvent.OnSortChange("popularity", "asc"))
-                }
-            }
-            item(key = "sort_score") {
-                FilterChip(label = "Điểm cao", selected = filters.orderBy == "score") {
-                    onEvent(SearchEvent.OnSortChange("score", "desc"))
-                }
-            }
+            filters.year?.let { add("$it") }
         }
+    }
+    if (labels.isEmpty()) return
 
-        if (genres.isNotEmpty()) {
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
-                horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
-            ) {
-                items(genres, key = { it.id }) { genre ->
-                    FilterChip(
-                        label = genre.name,
-                        selected = genre.id in filters.genreIds,
-                        onClick = { onEvent(SearchEvent.OnGenreToggle(genre.id)) },
-                    )
-                }
-            }
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+    ) {
+        items(labels, key = { it }) { label ->
+            SelectableChip(label = label, selected = true, onClick = onChipClick)
         }
     }
 }
 
 @Composable
-private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun FilterButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(Dimens.RadiusChip))
-            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+        modifier = modifier
+            .size(Dimens.IconButtonSize)
+            .clip(RoundedCornerShape(Dimens.RadiusButton))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick)
-            .padding(horizontal = Dimens.SpaceMd, vertical = Dimens.SpaceXs),
+            .semantics { contentDescription = "Sắp xếp & Lọc" },
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Text(text = "🎚", style = MaterialTheme.typography.titleMedium)
     }
 }
 

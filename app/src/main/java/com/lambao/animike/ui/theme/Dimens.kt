@@ -35,5 +35,10 @@ object Dimens {
 
     // Detail — thẻ tập phim trong EpisodesSection, kit Animax MVP3 UI-4
     val EpisodeCardWidth = 140.dp
-    val TabIndicatorHeight = 2.dp
+
+    // ReviewsScreen — chiều cao placeholder shimmer cho review card
+    val ReviewCardPlaceholderHeight = 96.dp
+
+    // Home hero slider — chấm chỉ báo trang (page indicator dot)
+    val PagerDotSize = 8.dp
 }

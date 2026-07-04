@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lambao.animike.ui.components.AnimeCard
@@ -53,7 +54,7 @@ private fun FavoritesScreenContent(state: FavoritesState, onEvent: (FavoritesEve
                 .padding(padding),
         ) {
             Text(
-                text = "Yêu thích",
+                text = "Danh sách",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
                 modifier = Modifier.padding(Dimens.ScreenPadding),
@@ -62,8 +63,10 @@ private fun FavoritesScreenContent(state: FavoritesState, onEvent: (FavoritesEve
             if (state.favorites.isEmpty()) {
                 EmptyFavoritesContent()
             } else {
+                // 2 cột poster lớn (kit Animax MVP3 UI-5) — khác 3 cột nhỏ của
+                // Characters/Search vì đây là grid poster chính, không phải preview.
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
+                    columns = GridCells.Fixed(2),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(Dimens.ScreenPadding),
                     horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
@@ -74,6 +77,7 @@ private fun FavoritesScreenContent(state: FavoritesState, onEvent: (FavoritesEve
                             anime = anime,
                             onClick = { onEvent(FavoritesEvent.OnAnimeClick(anime.malId)) },
                             modifier = Modifier.fillMaxWidth(),
+                            showTitle = false,
                         )
                     }
                 }
@@ -87,13 +91,23 @@ private fun EmptyFavoritesContent() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
+            verticalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+            modifier = Modifier.padding(horizontal = Dimens.SpaceXxl),
         ) {
-            Text(text = "♡", style = MaterialTheme.typography.displaySmall)
+            // Icon bookmark khớp với icon tab (AniMikeNavHost) — không dùng trái
+            // tim vì glyph đó đã đại diện cho hành động "Yêu thích" ở Home/Detail.
+            Text(text = "🔖", style = MaterialTheme.typography.displayMedium)
             Text(
-                text = "Chưa có anime yêu thích nào",
+                text = "Danh sách trống",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = Dimens.SpaceMd),
+            )
+            Text(
+                text = "Bạn chưa thêm anime nào vào danh sách yêu thích",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
             )
         }
     }

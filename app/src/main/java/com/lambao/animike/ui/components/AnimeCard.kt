@@ -35,6 +35,9 @@ fun AnimeCard(
     // Số thứ hạng đè góc dưới-trái ảnh — chỉ dùng cho section "Top Hits"
     // trên Home (kit Animax), null ở mọi nơi khác.
     rank: Int? = null,
+    // false cho grid "My List" (kit Animax MVP3 UI-5) — poster đã đủ lớn để
+    // nhận diện, ẩn title/year cho gọn giống kit thay vì lặp lại tên phim.
+    showTitle: Boolean = true,
 ) {
     // ColorPainter không override equals() — remember để tránh AsyncImage coi
     // placeholder/error/fallback là "đổi" ở mỗi recomposition khi list cuộn.
@@ -45,9 +48,11 @@ fun AnimeCard(
         Box {
             AsyncImage(
                 model = anime.imageUrl,
-                // Ảnh trang trí — title hiển thị ngay bên dưới đã đủ cho TalkBack,
-                // tránh đọc trùng lặp 2 lần.
-                contentDescription = null,
+                // showTitle=true: title Text bên dưới đã đủ cho TalkBack, ảnh để
+                // null tránh đọc trùng lặp 2 lần. showTitle=false (grid My List):
+                // không còn Text nào để merge semantics — phải gán title vào đây,
+                // nếu không TalkBack sẽ focus vào 1 card rỗng không có nhãn.
+                contentDescription = if (showTitle) null else anime.title,
                 contentScale = ContentScale.Crop,
                 placeholder = placeholderPainter,
                 error = placeholderPainter,
@@ -77,21 +82,23 @@ fun AnimeCard(
                 )
             }
         }
-        Text(
-            text = anime.title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = Dimens.SpaceXs),
-        )
-        if (anime.year != null) {
+        if (showTitle) {
             Text(
-                text = "${anime.year}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = anime.title,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = Dimens.SpaceXs),
             )
+            if (anime.year != null) {
+                Text(
+                    text = "${anime.year}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = Dimens.SpaceXs),
+                )
+            }
         }
     }
 }

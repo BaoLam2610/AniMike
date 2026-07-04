@@ -13,10 +13,10 @@ data class SearchState(
 
 sealed interface SearchEvent {
     data class OnQueryChange(val query: String) : SearchEvent
-    data class OnTypeFilterChange(val type: String?) : SearchEvent
-    data class OnStatusFilterChange(val status: String?) : SearchEvent
-    data class OnGenreToggle(val genreId: Int) : SearchEvent
-    data class OnSortChange(val orderBy: String, val sort: String) : SearchEvent
+    // Áp dụng nguyên cụm filter 1 lần từ màn "Sắp xếp & Lọc" (kit Animax MVP3
+    // UI-6, nút Apply) — thay cho các event sửa từng field riêng lẻ trước đây,
+    // vì màn filter giờ có draft cục bộ + Apply/Reset, không áp ngay từng tap.
+    data class OnFiltersApplied(val filters: SearchFilters) : SearchEvent
     data class OnAnimeClick(val malId: Int) : SearchEvent
 }
 

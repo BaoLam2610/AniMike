@@ -8,17 +8,12 @@ import com.lambao.animike.domain.model.toUserMessage
 import com.lambao.animike.ui.base.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repository: AnimeRepository,
@@ -33,17 +28,16 @@ class HomeViewModel @Inject constructor(
     private var seasonNowJob: Job? = null
     private var topAnimeJob: Job? = null
     private var upcomingJob: Job? = null
-    private var heroFavoriteJob: Job? = null
 
-    // Hero = anime đầu tiên của Season Now, đổi theo observeCachedLists() bên
-    // dưới — flatMapLatest để observeIsFavorite luôn bám đúng hero hiện tại.
-    private val heroMalIdFlow = MutableStateFlow<Int?>(null)
+    // Guard double-tap theo TỪNG anime — hero giờ là slider nhiều trang, dùng
+    // 1 job chung sẽ drop nhầm tap hợp lệ trên trang khác khi user vuốt nhanh.
+    private val heroFavoriteJobs = mutableMapOf<Int, Job>()
 
     init {
         // Room là nguồn hiển thị duy nhất — collect Flow suốt vòng đời màn
         // hình; refresh() chỉ quyết định KHI NÀO gọi API, không tự set list.
         observeCachedLists()
-        observeHeroFavoriteStatus()
+        observeFavoriteIds()
         viewModelScope.launch {
             refreshSeasonNow()
             refreshTopAnime()
@@ -104,15 +98,20 @@ class HomeViewModel @Inject constructor(
                 upcomingJob = refreshJob
             }
 
-            HomeEvent.OnHeroFavoriteClick -> {
-                // Bỏ qua nếu lần toggle trước chưa xong — cùng lý do với
-                // DetailViewModel.OnFavoriteClick (tránh double-tap ghi thừa Room).
-                if (heroFavoriteJob?.isActive == true) return
-                val hero = currentState().seasonNow.animeList.firstOrNull() ?: return
-                heroFavoriteJob = viewModelScope.launch {
-                    favoriteRepository.toggleFavorite(hero)
+            is HomeEvent.OnHeroFavoriteClick -> {
+                // Bỏ qua nếu lần toggle trước của CHÍNH anime này chưa xong —
+                // cùng lý do với DetailViewModel.OnFavoriteClick (tránh
+                // double-tap ghi thừa Room).
+                if (heroFavoriteJobs[event.malId]?.isActive == true) return
+                val anime = currentState().seasonNow.animeList
+                    .firstOrNull { it.malId == event.malId } ?: return
+                heroFavoriteJobs[event.malId] = viewModelScope.launch {
+                    favoriteRepository.toggleFavorite(anime)
                 }
             }
+
+            HomeEvent.OnSeeAllTopAnimeClick -> sendEffect(HomeEffect.NavigateToTopAnime)
+            HomeEvent.OnSeeAllUpcomingClick -> sendEffect(HomeEffect.NavigateToUpcoming)
         }
     }
 
@@ -120,7 +119,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             repository.observeSeasonNow().collect { list ->
                 setState { copy(seasonNow = seasonNow.copy(animeList = list)) }
-                heroMalIdFlow.value = list.firstOrNull()?.malId
             }
         }
         viewModelScope.launch {
@@ -135,13 +133,14 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun observeHeroFavoriteStatus() {
+    private fun observeFavoriteIds() {
+        // Hero slider có nhiều trang, mỗi trang cần biết đã yêu thích hay chưa —
+        // observe cả bảng favorite rồi rút về Set<malId> (bảng local nhỏ, rẻ hơn
+        // là quản lý N flow observeIsFavorite theo trang đang hiện).
         viewModelScope.launch {
-            heroMalIdFlow
-                .flatMapLatest { malId ->
-                    if (malId == null) flowOf(false) else favoriteRepository.observeIsFavorite(malId)
-                }
-                .collect { isFavorite -> setState { copy(heroIsFavorite = isFavorite) } }
+            favoriteRepository.observeFavorites().collect { favorites ->
+                setState { copy(favoriteIds = favorites.mapTo(mutableSetOf()) { it.malId }) }
+            }
         }
     }
 

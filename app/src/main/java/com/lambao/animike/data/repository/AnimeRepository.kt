@@ -1,6 +1,7 @@
 package com.lambao.animike.data.repository
 
 import android.util.Log
+import androidx.paging.PagingSource
 import com.lambao.animike.data.local.CacheTtl
 import com.lambao.animike.data.local.dao.AnimeListDao
 import com.lambao.animike.data.local.entity.AnimeListKey
@@ -11,6 +12,7 @@ import com.lambao.animike.data.remote.dto.JikanListResponse
 import com.lambao.animike.domain.mapper.toDomain
 import com.lambao.animike.domain.mapper.toListEntity
 import com.lambao.animike.domain.model.Anime
+import com.lambao.animike.domain.model.AnimeListSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -25,6 +27,10 @@ interface AnimeRepository {
     suspend fun refreshSeasonNow(force: Boolean = false): ApiResult<Unit>
     suspend fun refreshTopAnime(force: Boolean = false): ApiResult<Unit>
     suspend fun refreshUpcoming(force: Boolean = false): ApiResult<Unit>
+
+    // Bản Paging 3 cho màn "Xem tất cả" (Top Hits / Sắp chiếu) — cuộn xuống
+    // tự tải thêm trang, tách khỏi cache Room của 3 list preview phía trên.
+    fun animeListPagingSource(source: AnimeListSource): PagingSource<Int, Anime>
 }
 
 class AnimeRepositoryImpl @Inject constructor(
@@ -44,6 +50,9 @@ class AnimeRepositoryImpl @Inject constructor(
 
     override suspend fun refreshUpcoming(force: Boolean): ApiResult<Unit> =
         refreshList(AnimeListKey.UPCOMING, force) { api.getUpcoming() }
+
+    override fun animeListPagingSource(source: AnimeListSource): PagingSource<Int, Anime> =
+        AnimeListPagingSource(api, source)
 
     private fun observeList(listKey: String): Flow<List<Anime>> =
         dao.observeList(listKey).map { entities -> entities.map { it.toDomain() } }

@@ -26,8 +26,8 @@ class DetailViewModel @Inject constructor(
 
     private val malId: Int = checkNotNull(savedStateHandle[Routes.DETAIL_ARG_MAL_ID])
 
-    // Cùng lý do với HomeViewModel: đảm bảo 3 lệnh gọi (full/characters/
-    // recommendations) không bao giờ chạy song song, kể cả khi retry xen vào.
+    // Cùng lý do với HomeViewModel: đảm bảo các lệnh gọi Jikan trong loadAll
+    // không bao giờ chạy song song, kể cả khi retry xen vào.
     private val loadMutex = Mutex()
     private var loadJob: Job? = null
     private var favoriteJob: Job? = null
@@ -77,6 +77,12 @@ class DetailViewModel @Inject constructor(
             }
 
             is DetailEvent.OnRecommendationClick -> sendEffect(DetailEffect.NavigateToDetail(event.malId))
+
+            DetailEvent.OnSeeAllEpisodesClick -> sendEffect(DetailEffect.NavigateToEpisodes(malId))
+
+            DetailEvent.OnSeeAllCharactersClick -> sendEffect(DetailEffect.NavigateToCharacters(malId))
+
+            DetailEvent.OnSeeAllReviewsClick -> sendEffect(DetailEffect.NavigateToReviews(malId))
         }
     }
 
@@ -138,6 +144,11 @@ class DetailViewModel @Inject constructor(
         val reviewsResult = loadMutex.withLock { repository.getReviews(malId) }
         if (reviewsResult is ApiResult.Success) {
             setState { copy(reviews = reviewsResult.data) }
+        }
+
+        val picturesResult = loadMutex.withLock { repository.getPictures(malId) }
+        if (picturesResult is ApiResult.Success) {
+            setState { copy(pictures = picturesResult.data) }
         }
     }
 }

@@ -10,4 +10,7 @@ data class SearchFilters(
     val genreIds: Set<Int> = emptySet(),
     val orderBy: String = "popularity",
     val sort: String = "asc",
+    // Năm phát hành (kit Animax MVP3 UI-6) — map sang start_date/end_date của
+    // năm đó, Jikan không có tham số "year" riêng cho /anime search.
+    val year: Int? = null,
 )

@@ -69,13 +69,11 @@ class SearchViewModel @Inject constructor(
                 queryFlow.value = event.query
             }
 
-            is SearchEvent.OnTypeFilterChange -> updateFilters { copy(type = event.type) }
-            is SearchEvent.OnStatusFilterChange -> updateFilters { copy(status = event.status) }
-            is SearchEvent.OnGenreToggle -> updateFilters {
-                copy(genreIds = if (event.genreId in genreIds) genreIds - event.genreId else genreIds + event.genreId)
+            is SearchEvent.OnFiltersApplied -> {
+                filtersFlow.value = event.filters
+                setState { copy(filters = event.filters) }
             }
 
-            is SearchEvent.OnSortChange -> updateFilters { copy(orderBy = event.orderBy, sort = event.sort) }
             is SearchEvent.OnAnimeClick -> sendEffect(SearchEffect.NavigateToDetail(event.malId))
         }
     }
@@ -86,11 +84,5 @@ class SearchViewModel @Inject constructor(
                 setState { copy(genres = genres) }
             }
         }
-    }
-
-    private fun updateFilters(reducer: SearchFilters.() -> SearchFilters) {
-        val updated = filtersFlow.value.reducer()
-        filtersFlow.value = updated
-        setState { copy(filters = updated) }
     }
 }
