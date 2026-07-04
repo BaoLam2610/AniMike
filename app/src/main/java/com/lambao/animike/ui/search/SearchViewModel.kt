@@ -5,7 +5,6 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import com.lambao.animike.data.repository.ApiResult
 import com.lambao.animike.data.repository.SearchRepository
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.SearchFilters
@@ -57,7 +56,10 @@ class SearchViewModel @Inject constructor(
         .cachedIn(viewModelScope)
 
     init {
-        loadGenres()
+        // Room là nguồn hiển thị duy nhất cho danh sách thể loại; refresh chỉ
+        // quyết định khi nào gọi lại API (TTL 7 ngày — genres gần như tĩnh).
+        observeCachedGenres()
+        viewModelScope.launch { repository.refreshGenres() }
     }
 
     override fun onEvent(event: SearchEvent) {
@@ -78,11 +80,10 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun loadGenres() {
+    private fun observeCachedGenres() {
         viewModelScope.launch {
-            when (val result = repository.getGenres()) {
-                is ApiResult.Success -> setState { copy(genres = result.data) }
-                is ApiResult.Error -> Unit // filter thể loại chỉ ẩn nếu lỗi, không critical
+            repository.observeGenres().collect { genres ->
+                setState { copy(genres = genres) }
             }
         }
     }

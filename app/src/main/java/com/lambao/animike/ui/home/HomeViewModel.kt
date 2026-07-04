@@ -28,10 +28,13 @@ class HomeViewModel @Inject constructor(
     private var upcomingJob: Job? = null
 
     init {
+        // Room là nguồn hiển thị duy nhất — collect Flow suốt vòng đời màn
+        // hình; refresh() chỉ quyết định KHI NÀO gọi API, không tự set list.
+        observeCachedLists()
         viewModelScope.launch {
-            loadSeasonNow()
-            loadTopAnime()
-            loadUpcoming()
+            refreshSeasonNow()
+            refreshTopAnime()
+            refreshUpcoming()
         }
     }
 
@@ -41,11 +44,12 @@ class HomeViewModel @Inject constructor(
         // của lần retry nếu không đợi nó dừng hẳn.
         when (event) {
             is HomeEvent.OnAnimeClick -> sendEffect(HomeEffect.NavigateToDetail(event.malId))
+
             HomeEvent.OnRetrySeasonNow -> {
                 val previous = seasonNowJob
                 seasonNowJob = viewModelScope.launch {
                     previous?.cancelAndJoin()
-                    loadSeasonNow()
+                    refreshSeasonNow(force = true)
                 }
             }
 
@@ -53,7 +57,7 @@ class HomeViewModel @Inject constructor(
                 val previous = topAnimeJob
                 topAnimeJob = viewModelScope.launch {
                     previous?.cancelAndJoin()
-                    loadTopAnime()
+                    refreshTopAnime(force = true)
                 }
             }
 
@@ -61,20 +65,57 @@ class HomeViewModel @Inject constructor(
                 val previous = upcomingJob
                 upcomingJob = viewModelScope.launch {
                     previous?.cancelAndJoin()
-                    loadUpcoming()
+                    refreshUpcoming(force = true)
                 }
+            }
+
+            HomeEvent.OnPullToRefresh -> {
+                val previousSeasonNow = seasonNowJob
+                val previousTopAnime = topAnimeJob
+                val previousUpcoming = upcomingJob
+                // Gán cùng 1 job cho cả 3 biến — nếu user bấm "Thử lại" riêng 1
+                // section trong lúc pull-to-refresh đang chạy, cancelAndJoin sẽ
+                // nhắm đúng job đang chạy thật thay vì job cũ đã xong.
+                val refreshJob = viewModelScope.launch {
+                    setState { copy(isRefreshing = true) }
+                    previousSeasonNow?.cancelAndJoin()
+                    previousTopAnime?.cancelAndJoin()
+                    previousUpcoming?.cancelAndJoin()
+                    refreshSeasonNow(force = true)
+                    refreshTopAnime(force = true)
+                    refreshUpcoming(force = true)
+                    setState { copy(isRefreshing = false) }
+                }
+                seasonNowJob = refreshJob
+                topAnimeJob = refreshJob
+                upcomingJob = refreshJob
             }
         }
     }
 
-    private suspend fun loadSeasonNow() {
+    private fun observeCachedLists() {
+        viewModelScope.launch {
+            repository.observeSeasonNow().collect { list ->
+                setState { copy(seasonNow = seasonNow.copy(animeList = list)) }
+            }
+        }
+        viewModelScope.launch {
+            repository.observeTopAnime().collect { list ->
+                setState { copy(topAnime = topAnime.copy(animeList = list)) }
+            }
+        }
+        viewModelScope.launch {
+            repository.observeUpcoming().collect { list ->
+                setState { copy(upcoming = upcoming.copy(animeList = list)) }
+            }
+        }
+    }
+
+    private suspend fun refreshSeasonNow(force: Boolean = false) {
         setState { copy(seasonNow = seasonNow.copy(isLoading = true, error = null)) }
         loadMutex.withLock {
-            when (val result = repository.getSeasonNow()) {
-                is ApiResult.Success -> setState {
-                    copy(seasonNow = SectionState(isLoading = false, animeList = result.data))
-                }
-
+            when (val result = repository.refreshSeasonNow(force)) {
+                is ApiResult.Success -> setState { copy(seasonNow = seasonNow.copy(isLoading = false)) }
                 is ApiResult.Error -> setState {
                     copy(seasonNow = seasonNow.copy(isLoading = false, error = result.error.toUserMessage()))
                 }
@@ -82,14 +123,11 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadTopAnime() {
+    private suspend fun refreshTopAnime(force: Boolean = false) {
         setState { copy(topAnime = topAnime.copy(isLoading = true, error = null)) }
         loadMutex.withLock {
-            when (val result = repository.getTopAnime()) {
-                is ApiResult.Success -> setState {
-                    copy(topAnime = SectionState(isLoading = false, animeList = result.data))
-                }
-
+            when (val result = repository.refreshTopAnime(force)) {
+                is ApiResult.Success -> setState { copy(topAnime = topAnime.copy(isLoading = false)) }
                 is ApiResult.Error -> setState {
                     copy(topAnime = topAnime.copy(isLoading = false, error = result.error.toUserMessage()))
                 }
@@ -97,14 +135,11 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadUpcoming() {
+    private suspend fun refreshUpcoming(force: Boolean = false) {
         setState { copy(upcoming = upcoming.copy(isLoading = true, error = null)) }
         loadMutex.withLock {
-            when (val result = repository.getUpcoming()) {
-                is ApiResult.Success -> setState {
-                    copy(upcoming = SectionState(isLoading = false, animeList = result.data))
-                }
-
+            when (val result = repository.refreshUpcoming(force)) {
+                is ApiResult.Success -> setState { copy(upcoming = upcoming.copy(isLoading = false)) }
                 is ApiResult.Error -> setState {
                     copy(upcoming = upcoming.copy(isLoading = false, error = result.error.toUserMessage()))
                 }

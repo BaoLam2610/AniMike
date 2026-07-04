@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -84,7 +85,9 @@ private fun SearchScreenContent(
     onBackClick: () -> Unit,
     onEvent: (SearchEvent) -> Unit,
 ) {
-    Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
+    // contentWindowInsets = 0: AniMikeNavHost đã có Scaffold ngoài tiêu thụ
+    // insets — tránh tiêu thụ 2 lần gây khoảng trắng dư.
+    Scaffold(modifier = Modifier.fillMaxSize(), contentWindowInsets = WindowInsets(0)) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()

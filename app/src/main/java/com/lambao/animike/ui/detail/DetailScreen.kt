@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +42,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -91,7 +94,9 @@ private fun DetailScreenContent(
     onBackClick: () -> Unit,
     onEvent: (DetailEvent) -> Unit,
 ) {
-    Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
+    // contentWindowInsets = 0: AniMikeNavHost đã có Scaffold ngoài tiêu thụ
+    // insets — tránh tiêu thụ 2 lần gây khoảng trắng dư quanh status bar.
+    Scaffold(modifier = Modifier.fillMaxSize(), contentWindowInsets = WindowInsets(0)) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -99,20 +104,28 @@ private fun DetailScreenContent(
                 .background(MaterialTheme.colorScheme.background),
         ) {
             when {
+                // Cache-first: đã có detail (từ Room) thì luôn hiện, kể cả khi
+                // đang refresh nền hoặc refresh vừa lỗi (stale-while-revalidate).
+                state.detail != null -> DetailContent(
+                    detail = state.detail,
+                    characters = state.characters,
+                    recommendations = state.recommendations,
+                    isFavorite = state.isFavorite,
+                    onBackClick = onBackClick,
+                    onEvent = onEvent,
+                )
+
                 state.isLoading -> LoadingContent(onBackClick)
+
                 state.error != null -> ErrorContent(
                     message = state.error,
                     onBackClick = onBackClick,
                     onRetry = { onEvent(DetailEvent.OnRetry) },
                 )
 
-                state.detail != null -> DetailContent(
-                    detail = state.detail,
-                    characters = state.characters,
-                    recommendations = state.recommendations,
-                    onBackClick = onBackClick,
-                    onEvent = onEvent,
-                )
+                // Lưới an toàn: khoảng hở ngắn giữa lúc refresh xong (isLoading=false)
+                // và lúc Flow từ Room re-emit detail — không để màn trắng thoáng qua.
+                else -> LoadingContent(onBackClick)
             }
         }
     }
@@ -123,11 +136,19 @@ private fun DetailContent(
     detail: AnimeDetail,
     characters: List<AnimeCharacter>,
     recommendations: List<Anime>,
+    isFavorite: Boolean,
     onBackClick: () -> Unit,
     onEvent: (DetailEvent) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
-        item { HeroHeader(detail = detail, onBackClick = onBackClick) }
+        item {
+            HeroHeader(
+                detail = detail,
+                isFavorite = isFavorite,
+                onBackClick = onBackClick,
+                onFavoriteClick = { onEvent(DetailEvent.OnFavoriteClick) },
+            )
+        }
 
         if (detail.genres.isNotEmpty()) {
             item { GenreChips(genres = detail.genres) }
@@ -161,7 +182,12 @@ private fun DetailContent(
 }
 
 @Composable
-private fun HeroHeader(detail: AnimeDetail, onBackClick: () -> Unit) {
+private fun HeroHeader(
+    detail: AnimeDetail,
+    isFavorite: Boolean,
+    onBackClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
+) {
     val placeholderPainter = ColorPainter(MaterialTheme.colorScheme.surfaceVariant)
     val background = MaterialTheme.colorScheme.background
 
@@ -186,6 +212,11 @@ private fun HeroHeader(detail: AnimeDetail, onBackClick: () -> Unit) {
                 ),
         )
         BackButton(onClick = onBackClick, modifier = Modifier.align(Alignment.TopStart).padding(Dimens.SpaceSm))
+        FavoriteButton(
+            isFavorite = isFavorite,
+            onClick = onFavoriteClick,
+            modifier = Modifier.align(Alignment.TopEnd).padding(Dimens.SpaceSm),
+        )
 
         Column(
             modifier = Modifier
@@ -246,6 +277,25 @@ private fun AiringPill() {
             text = "ĐANG CHIẾU",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.success,
+        )
+    }
+}
+
+@Composable
+private fun FavoriteButton(isFavorite: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(Dimens.IconButtonSize)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = if (isFavorite) "Bỏ yêu thích" else "Yêu thích" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = if (isFavorite) "♥" else "♡",
+            style = MaterialTheme.typography.titleMedium,
+            color = if (isFavorite) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onBackground,
         )
     }
 }

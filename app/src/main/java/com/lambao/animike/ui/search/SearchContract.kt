@@ -1,8 +1,10 @@
 package com.lambao.animike.ui.search
 
+import androidx.compose.runtime.Immutable
 import com.lambao.animike.domain.model.Genre
 import com.lambao.animike.domain.model.SearchFilters
 
+@Immutable
 data class SearchState(
     val query: String = "",
     val filters: SearchFilters = SearchFilters(),

@@ -1,5 +1,8 @@
 package com.lambao.animike.domain.model
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class AnimeDetail(
     val malId: Int,
     val title: String,
@@ -18,6 +21,7 @@ data class AnimeDetail(
     val relations: List<RelationGroup>,
 )
 
+@Immutable
 data class RelationGroup(
     val relation: String,
     val titles: List<String>,

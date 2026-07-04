@@ -4,6 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import com.lambao.animike.data.repository.AnimeDetailRepository
 import com.lambao.animike.data.repository.ApiResult
+import com.lambao.animike.data.repository.FavoriteRepository
+import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.toUserMessage
 import com.lambao.animike.ui.base.BaseViewModel
 import com.lambao.animike.ui.navigation.Routes
@@ -19,6 +21,7 @@ import javax.inject.Inject
 class DetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: AnimeDetailRepository,
+    private val favoriteRepository: FavoriteRepository,
 ) : BaseViewModel<DetailState, DetailEvent, DetailEffect>(DetailState()) {
 
     private val malId: Int = checkNotNull(savedStateHandle[Routes.DETAIL_ARG_MAL_ID])
@@ -27,8 +30,13 @@ class DetailViewModel @Inject constructor(
     // recommendations) không bao giờ chạy song song, kể cả khi retry xen vào.
     private val loadMutex = Mutex()
     private var loadJob: Job? = null
+    private var favoriteJob: Job? = null
 
     init {
+        // Room là nguồn hiển thị duy nhất cho detail — collect Flow suốt vòng
+        // đời màn hình; loadAll() chỉ quyết định KHI NÀO gọi API.
+        observeCachedDetail()
+        observeFavoriteStatus()
         loadJob = viewModelScope.launch { loadAll() }
     }
 
@@ -41,7 +49,7 @@ class DetailViewModel @Inject constructor(
                 val previous = loadJob
                 loadJob = viewModelScope.launch {
                     previous?.cancelAndJoin()
-                    loadAll()
+                    loadAll(force = true)
                 }
             }
 
@@ -49,19 +57,65 @@ class DetailViewModel @Inject constructor(
                 currentState().detail?.trailerYoutubeId?.let { sendEffect(DetailEffect.OpenYoutube(it)) }
             }
 
+            DetailEvent.OnFavoriteClick -> {
+                // Bỏ qua nếu lần toggle trước chưa xong — tránh double-tap bắn
+                // nhiều coroutine gần như đồng thời (dù DAO đã transaction-safe,
+                // vẫn nên chặn sớm ở đây để không lãng phí ghi Room thừa).
+                if (favoriteJob?.isActive == true) return
+                val detail = currentState().detail ?: return
+                favoriteJob = viewModelScope.launch {
+                    favoriteRepository.toggleFavorite(
+                        Anime(
+                            malId = detail.malId,
+                            title = detail.title,
+                            imageUrl = detail.imageUrl,
+                            score = detail.score,
+                            year = detail.year,
+                        ),
+                    )
+                }
+            }
+
             is DetailEvent.OnRecommendationClick -> sendEffect(DetailEffect.NavigateToDetail(event.malId))
         }
     }
 
-    private suspend fun loadAll() {
+    private fun observeCachedDetail() {
+        viewModelScope.launch {
+            repository.observeAnimeDetail(malId).collect { detail ->
+                if (detail != null) {
+                    setState { copy(detail = detail) }
+                }
+            }
+        }
+    }
+
+    private fun observeFavoriteStatus() {
+        viewModelScope.launch {
+            favoriteRepository.observeIsFavorite(malId).collect { isFavorite ->
+                setState { copy(isFavorite = isFavorite) }
+            }
+        }
+    }
+
+    private suspend fun loadAll(force: Boolean = false) {
         setState { copy(isLoading = true, error = null) }
 
-        val detailResult = loadMutex.withLock { repository.getAnimeDetail(malId) }
+        val detailResult = loadMutex.withLock { repository.refreshAnimeDetail(malId, force) }
         when (detailResult) {
-            is ApiResult.Success -> setState { copy(isLoading = false, detail = detailResult.data) }
+            is ApiResult.Success -> setState { copy(isLoading = false) }
             is ApiResult.Error -> {
-                setState { copy(isLoading = false, error = detailResult.error.toUserMessage()) }
-                return
+                // Đã có cache thì giữ nguyên hiển thị, refresh lỗi không chặn
+                // màn hình (stale-while-revalidate) — chỉ báo full error khi
+                // chưa từng có dữ liệu để hiện.
+                val hasCachedDetail = currentState().detail != null
+                setState {
+                    copy(
+                        isLoading = false,
+                        error = if (hasCachedDetail) null else detailResult.error.toUserMessage(),
+                    )
+                }
+                if (!hasCachedDetail) return
             }
         }
 

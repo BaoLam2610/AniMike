@@ -1,20 +1,24 @@
 package com.lambao.animike.ui.detail
 
+import androidx.compose.runtime.Immutable
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
 
+@Immutable
 data class DetailState(
     val isLoading: Boolean = true,
     val detail: AnimeDetail? = null,
     val error: String? = null,
     val characters: List<AnimeCharacter> = emptyList(),
     val recommendations: List<Anime> = emptyList(),
+    val isFavorite: Boolean = false,
 )
 
 sealed interface DetailEvent {
     data object OnRetry : DetailEvent
     data object OnTrailerClick : DetailEvent
+    data object OnFavoriteClick : DetailEvent
     data class OnRecommendationClick(val malId: Int) : DetailEvent
 }
 

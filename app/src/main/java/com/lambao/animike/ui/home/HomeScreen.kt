@@ -1,33 +1,28 @@
 package com.lambao.animike.ui.home
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -41,7 +36,6 @@ import com.lambao.animike.ui.theme.Dimens
 @Composable
 fun HomeScreen(
     onNavigateToDetail: (Int) -> Unit,
-    onNavigateToSearch: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -54,59 +48,66 @@ fun HomeScreen(
         }
     }
 
-    HomeScreenContent(state = state, onNavigateToSearch = onNavigateToSearch, onEvent = viewModel::onEvent)
+    HomeScreenContent(state = state, onEvent = viewModel::onEvent)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreenContent(
     state: HomeState,
-    onNavigateToSearch: () -> Unit,
     onEvent: (HomeEvent) -> Unit,
 ) {
-    Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-        LazyColumn(
+    // contentWindowInsets = 0: AniMikeNavHost đã có Scaffold ngoài tiêu thụ
+    // insets cho bottom nav — tránh tiêu thụ 2 lần gây khoảng trắng dư.
+    Scaffold(modifier = Modifier.fillMaxSize(), contentWindowInsets = WindowInsets(0)) { padding ->
+        PullToRefreshBox(
+            isRefreshing = state.isRefreshing,
+            onRefresh = { onEvent(HomeEvent.OnPullToRefresh) },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(vertical = Dimens.SpaceLg),
-            verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXl),
         ) {
-            item { HomeTopBar(onSearchClick = onNavigateToSearch) }
-            item {
-                AnimeSection(
-                    title = "Season Now",
-                    section = state.seasonNow,
-                    onRetry = { onEvent(HomeEvent.OnRetrySeasonNow) },
-                    onAnimeClick = { onEvent(HomeEvent.OnAnimeClick(it)) },
-                )
-            }
-            item {
-                AnimeSection(
-                    title = "Top Anime",
-                    section = state.topAnime,
-                    onRetry = { onEvent(HomeEvent.OnRetryTopAnime) },
-                    onAnimeClick = { onEvent(HomeEvent.OnAnimeClick(it)) },
-                )
-            }
-            item {
-                AnimeSection(
-                    title = "Sắp chiếu",
-                    section = state.upcoming,
-                    onRetry = { onEvent(HomeEvent.OnRetryUpcoming) },
-                    onAnimeClick = { onEvent(HomeEvent.OnAnimeClick(it)) },
-                )
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(vertical = Dimens.SpaceLg),
+                verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXl),
+            ) {
+                item { HomeTopBar() }
+                item {
+                    AnimeSection(
+                        title = "Season Now",
+                        section = state.seasonNow,
+                        onRetry = { onEvent(HomeEvent.OnRetrySeasonNow) },
+                        onAnimeClick = { onEvent(HomeEvent.OnAnimeClick(it)) },
+                    )
+                }
+                item {
+                    AnimeSection(
+                        title = "Top Anime",
+                        section = state.topAnime,
+                        onRetry = { onEvent(HomeEvent.OnRetryTopAnime) },
+                        onAnimeClick = { onEvent(HomeEvent.OnAnimeClick(it)) },
+                    )
+                }
+                item {
+                    AnimeSection(
+                        title = "Sắp chiếu",
+                        section = state.upcoming,
+                        onRetry = { onEvent(HomeEvent.OnRetryUpcoming) },
+                        onAnimeClick = { onEvent(HomeEvent.OnAnimeClick(it)) },
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun HomeTopBar(onSearchClick: () -> Unit) {
+private fun HomeTopBar() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = Dimens.ScreenPadding),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -114,17 +115,6 @@ private fun HomeTopBar(onSearchClick: () -> Unit) {
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
         )
-        Box(
-            modifier = Modifier
-                .size(Dimens.IconButtonSize)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface)
-                .clickable(onClick = onSearchClick)
-                .semantics { contentDescription = "Tìm kiếm" },
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(text = "🔍", style = MaterialTheme.typography.titleMedium)
-        }
     }
 }
 
@@ -143,6 +133,22 @@ private fun AnimeSection(
             modifier = Modifier.padding(horizontal = Dimens.ScreenPadding),
         )
         when {
+            // Cache-first (stale-while-revalidate): còn dữ liệu cũ thì luôn hiện
+            // ngay, kể cả khi đang refresh nền hoặc refresh vừa lỗi — không để
+            // shimmer/error che mất nội dung đã có (jikan-api SKILL.md mục Caching).
+            section.animeList.isNotEmpty() -> LazyRow(
+                contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
+            ) {
+                items(section.animeList, key = { it.malId }) { anime ->
+                    AnimeCard(
+                        anime = anime,
+                        onClick = { onAnimeClick(anime.malId) },
+                        modifier = Modifier.width(Dimens.CardWidth),
+                    )
+                }
+            }
+
             section.isLoading -> {
                 // Hoist 1 animation dùng chung cho cả 6 placeholder của section này
                 val shimmerProgress = rememberShimmerProgress()
@@ -161,25 +167,12 @@ private fun AnimeSection(
 
             section.error != null -> SectionError(message = section.error, onRetry = onRetry)
 
-            section.animeList.isEmpty() -> Text(
+            else -> Text(
                 text = "Chưa có dữ liệu",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
             )
-
-            else -> LazyRow(
-                contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
-                horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
-            ) {
-                items(section.animeList, key = { it.malId }) { anime ->
-                    AnimeCard(
-                        anime = anime,
-                        onClick = { onAnimeClick(anime.malId) },
-                        modifier = Modifier.width(Dimens.CardWidth),
-                    )
-                }
-            }
         }
     }
 }
@@ -227,7 +220,6 @@ private fun HomeScreenPreview() {
                 ),
                 upcoming = SectionState(isLoading = true),
             ),
-            onNavigateToSearch = {},
             onEvent = {},
         )
     }
