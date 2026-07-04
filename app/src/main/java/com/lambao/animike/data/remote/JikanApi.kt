@@ -55,4 +55,10 @@ interface JikanApi {
 
     @GET("genres/anime")
     suspend fun getGenres(): JikanListResponse<GenreDto>
+
+    @GET("schedules")
+    suspend fun getSchedules(
+        @Query("filter") day: String,
+        @Query("page") page: Int = 1,
+    ): JikanListResponse<AnimeDto>
 }

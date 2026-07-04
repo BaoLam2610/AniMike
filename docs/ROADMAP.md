@@ -1,7 +1,7 @@
 # AniMike — Roadmap & Quy trình phát triển
 
 Hiện trạng project: Kotlin + Jetpack Compose (Material 3), minSdk 24, targetSdk 36.
-Đã hoàn thành Phase 0a → 2 (theme, networking pipeline, Home, Detail, Search) — đang ở MVP 1 (Phase 3).
+Đã hoàn thành Phase 0a → MVP 1 (Phase 3) + Season Archive — đang ở MVP 2 (Phase 4).
 
 **Skills & agents đã cài trong `.claude/`** (Claude Code tự nhận, xem `CLAUDE.md` ở root):
 - `skills/compose-expert` — guide Compose chuyên sâu (24 references + source androidx)
@@ -98,17 +98,20 @@ Nguyên tắc: mỗi MVP là một đợt nhỏ, **xong hẳn (build + review + 
 - [x] SearchScreen: TextField + debounce 500ms + nút xóa, Paging 3, danh sách duyệt mặc định khi chưa gõ
 - [x] Bộ lọc: type, status, genre (multi-select), sắp xếp
 
-### MVP 1 (Phase 3) — Favorites & offline (3-4 ngày) ← ĐANG LÀM
-- [ ] Room: entity + DAO cho favorites
-- [ ] Nút yêu thích ở Detail, màn hình Favorites
-- [ ] Bottom navigation 3 tab: Home / Search / Favorites
-- [ ] Cache stale-while-revalidate cho Home sections + Detail (xem mục 3):
+### MVP 1 (Phase 3) — Favorites & offline ✅ (2026-07)
+- [x] Room: entity + DAO cho favorites
+- [x] Nút yêu thích ở Detail, màn hình Favorites
+- [x] Bottom navigation: Home / Search / Duyệt (Season Archive) / Favorites
+- [x] Cache stale-while-revalidate cho Home sections + Detail (xem mục 3):
   entity list dạng `(listKey, malId, ..., position, fetchedAt)` cho season/top/upcoming,
   entity detail theo `malId`, genres TTL 7 ngày; repository chuyển sang expose `Flow` từ Room
-- [ ] Pull-to-refresh trên Home (bỏ qua TTL)
+- [x] Pull-to-refresh trên Home (bỏ qua TTL)
+- [x] Season Archive (`/seasons/{year}/{season}`, `/seasons`) — làm sớm hơn kế hoạch, đã qua compose-reviewer
 
-### MVP 2 (Phase 4) — Chốt v1 (3-5 ngày)
-- [ ] Lịch chiếu theo thứ (`/schedules`), Season Archive (`/seasons/{year}/{season}`, `/seasons`)
+### MVP 2 (Phase 4) — Chốt v1 (3-5 ngày) ← ĐANG LÀM
+- [x] Lịch chiếu theo thứ (`/schedules`) — gộp chung tab "Duyệt" với Season Archive qua
+  segmented control (giữ đúng giới hạn 3-4 tab của `animike-design` SKILL.md), mặc định
+  chọn đúng thứ hôm nay
 - [ ] Icon app, splash screen, review lại dark mode
 - [ ] Test trên nhiều kích thước màn hình; release build (minify + ProGuard rules cho Retrofit/serialization)
 

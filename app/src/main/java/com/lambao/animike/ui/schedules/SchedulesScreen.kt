@@ -1,4 +1,4 @@
-package com.lambao.animike.ui.seasonarchive
+package com.lambao.animike.ui.schedules
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,7 +26,6 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.lambao.animike.data.repository.toAppError
 import com.lambao.animike.domain.model.Anime
-import com.lambao.animike.domain.model.SeasonYear
 import com.lambao.animike.domain.model.toUserMessage
 import com.lambao.animike.ui.components.AnimePagingGrid
 import com.lambao.animike.ui.components.PagingGridError
@@ -34,21 +33,14 @@ import com.lambao.animike.ui.components.PagingGridLoading
 import com.lambao.animike.ui.components.PagingRefreshErrorBanner
 import com.lambao.animike.ui.theme.Dimens
 
-private val seasonLabels = mapOf(
-    "winter" to "Đông",
-    "spring" to "Xuân",
-    "summer" to "Hè",
-    "fall" to "Thu",
-)
-
 // Không có Scaffold/title riêng — đây là nội dung 1 tab bên trong BrowseScreen
 // (segmented control "Theo mùa" / "Theo thứ"), Scaffold + title "Duyệt" đã có
 // ở BrowseScreen (tránh tiêu thụ insets 2 lần như đã fix ở các screen khác).
 @Composable
-fun SeasonArchiveScreen(
+fun SchedulesScreen(
     onNavigateToDetail: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: SeasonArchiveViewModel = hiltViewModel(),
+    viewModel: SchedulesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val pagingItems = viewModel.items.collectAsLazyPagingItems()
@@ -56,45 +48,30 @@ fun SeasonArchiveScreen(
     LaunchedEffect(Unit) {
         viewModel.effect.collect { effect ->
             when (effect) {
-                is SeasonArchiveEffect.NavigateToDetail -> onNavigateToDetail(effect.malId)
+                is SchedulesEffect.NavigateToDetail -> onNavigateToDetail(effect.malId)
             }
         }
     }
 
-    SeasonArchiveScreenContent(state = state, pagingItems = pagingItems, onEvent = viewModel::onEvent, modifier = modifier)
+    SchedulesScreenContent(state = state, pagingItems = pagingItems, onEvent = viewModel::onEvent, modifier = modifier)
 }
 
 @Composable
-private fun SeasonArchiveScreenContent(
-    state: SeasonArchiveState,
+private fun SchedulesScreenContent(
+    state: SchedulesState,
     pagingItems: LazyPagingItems<Anime>,
-    onEvent: (SeasonArchiveEvent) -> Unit,
+    onEvent: (SchedulesEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
-        YearRow(
-            years = state.years,
-            selectedYear = state.selectedYear,
-            onYearSelected = { onEvent(SeasonArchiveEvent.OnYearSelected(it)) },
-        )
-        SeasonRow(
-            availableSeasons = state.years.find { it.year == state.selectedYear }?.seasons.orEmpty(),
-            selectedSeason = state.selectedSeason,
-            onSeasonSelected = { onEvent(SeasonArchiveEvent.OnSeasonSelected(it)) },
+        DayRow(
+            selectedDay = state.selectedDay,
+            onDaySelected = { onEvent(SchedulesEvent.OnDaySelected(it)) },
         )
 
-        // Danh sách năm/mùa lỗi (offline lần đầu, chưa có cache) — báo lỗi
-        // riêng vì đây là dữ liệu điều khiển chip, không phải nội dung grid.
-        if (state.yearsError != null) {
-            PagingRefreshErrorBanner(
-                message = state.yearsError,
-                onRetry = { onEvent(SeasonArchiveEvent.OnRetryYears) },
-            )
-        }
-
-        // Banner lỗi nhẹ khi refresh (đổi năm/mùa) thất bại nhưng vẫn còn
-        // item cũ để hiện — giữ cache cũ hiển thị + báo lỗi nhẹ, không che
-        // grid bên dưới (jikan-api SKILL.md mục Caching, điểm 3).
+        // Banner lỗi nhẹ khi refresh (đổi thứ) thất bại nhưng vẫn còn item
+        // cũ để hiện — giữ cache cũ hiển thị + báo lỗi nhẹ, không che grid
+        // bên dưới (jikan-api SKILL.md mục Caching, điểm 3).
         if (pagingItems.loadState.refresh is LoadState.Error && pagingItems.itemCount > 0) {
             val error = (pagingItems.loadState.refresh as LoadState.Error).error
             PagingRefreshErrorBanner(
@@ -104,15 +81,9 @@ private fun SeasonArchiveScreenContent(
         }
 
         when {
-            // Chưa có selectedYear/selectedSeason (đang chờ observeCachedYears()
-            // emit lần đầu, có thể chậm khi cold-start chưa có cache) — items Flow
-            // chưa phát gì (selectionFlow.filterNotNull()) nên itemCount luôn == 0
-            // lúc này; show loading thay vì để rơi xuống EmptyContent (sai bản chất).
-            state.selectedYear == null && state.yearsError == null -> PagingGridLoading()
-
-            // Không check itemCount == 0: khi đổi năm/mùa, flatMapLatest tạo Pager mới
-            // nhưng LazyPagingItems vẫn giữ item cũ của lựa chọn trước cho tới khi
-            // trang mới tải xong — ưu tiên refresh-loading để tránh hiện nhầm list cũ.
+            // Không check itemCount == 0: đổi thứ tạo Pager mới nhưng
+            // LazyPagingItems vẫn giữ item cũ cho tới khi trang mới tải xong —
+            // ưu tiên refresh-loading để tránh hiện nhầm lịch chiếu của thứ trước.
             pagingItems.loadState.refresh is LoadState.Loading -> PagingGridLoading()
 
             pagingItems.loadState.refresh is LoadState.Error && pagingItems.itemCount == 0 -> {
@@ -127,40 +98,23 @@ private fun SeasonArchiveScreenContent(
 
             else -> AnimePagingGrid(
                 pagingItems = pagingItems,
-                onAnimeClick = { onEvent(SeasonArchiveEvent.OnAnimeClick(it)) },
+                onAnimeClick = { onEvent(SchedulesEvent.OnAnimeClick(it)) },
             )
         }
     }
 }
 
 @Composable
-private fun YearRow(years: List<SeasonYear>, selectedYear: Int?, onYearSelected: (Int) -> Unit) {
+private fun DayRow(selectedDay: String, onDaySelected: (String) -> Unit) {
     LazyRow(
         contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
         horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
     ) {
-        items(years, key = { it.year }) { year ->
+        items(weekDays, key = { it }) { day ->
             PickerChip(
-                label = year.year.toString(),
-                selected = year.year == selectedYear,
-                onClick = { onYearSelected(year.year) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun SeasonRow(availableSeasons: List<String>, selectedSeason: String?, onSeasonSelected: (String) -> Unit) {
-    if (availableSeasons.isEmpty()) return
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
-    ) {
-        items(seasonOrder.filter { it in availableSeasons }, key = { it }) { season ->
-            PickerChip(
-                label = seasonLabels[season] ?: season,
-                selected = season == selectedSeason,
-                onClick = { onSeasonSelected(season) },
+                label = weekDayLabels[day] ?: day,
+                selected = day == selectedDay,
+                onClick = { onDaySelected(day) },
             )
         }
     }
@@ -187,7 +141,7 @@ private fun PickerChip(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun EmptyContent() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            text = "Không có anime nào trong mùa này",
+            text = "Không có anime nào chiếu vào ngày này",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

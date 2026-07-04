@@ -6,6 +6,8 @@ import com.lambao.animike.data.repository.AnimeRepository
 import com.lambao.animike.data.repository.AnimeRepositoryImpl
 import com.lambao.animike.data.repository.FavoriteRepository
 import com.lambao.animike.data.repository.FavoriteRepositoryImpl
+import com.lambao.animike.data.repository.SchedulesRepository
+import com.lambao.animike.data.repository.SchedulesRepositoryImpl
 import com.lambao.animike.data.repository.SearchRepository
 import com.lambao.animike.data.repository.SearchRepositoryImpl
 import com.lambao.animike.data.repository.SeasonArchiveRepository
@@ -39,4 +41,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindSeasonArchiveRepository(impl: SeasonArchiveRepositoryImpl): SeasonArchiveRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSchedulesRepository(impl: SchedulesRepositoryImpl): SchedulesRepository
 }

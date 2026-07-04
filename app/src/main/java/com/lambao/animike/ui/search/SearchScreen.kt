@@ -12,15 +12,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -37,20 +33,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
-import androidx.paging.compose.itemContentType
-import androidx.paging.compose.itemKey
 import com.lambao.animike.data.repository.toAppError
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.Genre
 import com.lambao.animike.domain.model.SearchFilters
 import com.lambao.animike.domain.model.toUserMessage
-import com.lambao.animike.ui.components.AnimeCard
-import com.lambao.animike.ui.components.AnimeCardPlaceholder
+import com.lambao.animike.ui.components.AnimePagingGrid
 import com.lambao.animike.ui.components.BackButton
 import com.lambao.animike.ui.components.PagingGridError
 import com.lambao.animike.ui.components.PagingGridLoading
 import com.lambao.animike.ui.components.PagingRefreshErrorBanner
-import com.lambao.animike.ui.components.rememberShimmerProgress
 import com.lambao.animike.ui.theme.Dimens
 
 @Composable
@@ -137,7 +129,7 @@ private fun SearchScreenContent(
 
                 pagingItems.itemCount == 0 -> SearchEmptyContent()
 
-                else -> ResultsGrid(
+                else -> AnimePagingGrid(
                     pagingItems = pagingItems,
                     onAnimeClick = { onEvent(SearchEvent.OnAnimeClick(it)) },
                 )
@@ -250,64 +242,6 @@ private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
             style = MaterialTheme.typography.labelSmall,
             color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-@Composable
-private fun ResultsGrid(pagingItems: LazyPagingItems<Anime>, onAnimeClick: (Int) -> Unit) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(Dimens.ScreenPadding),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
-        verticalArrangement = Arrangement.spacedBy(Dimens.CardGap),
-    ) {
-        // items(count, key, span, contentType, itemContent) là member function
-        // của LazyGridScope (như item()/align()/weight()) — không cần import.
-        items(
-            count = pagingItems.itemCount,
-            key = pagingItems.itemKey { it.malId },
-            contentType = pagingItems.itemContentType { "anime" },
-        ) { index ->
-            pagingItems[index]?.let { anime ->
-                AnimeCard(
-                    anime = anime,
-                    onClick = { onAnimeClick(anime.malId) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        if (pagingItems.loadState.append is LoadState.Loading) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                val shimmerProgress = rememberShimmerProgress()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = Dimens.SpaceSm),
-                    horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
-                ) {
-                    repeat(3) {
-                        AnimeCardPlaceholder(progress = shimmerProgress, modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-
-        if (pagingItems.loadState.append is LoadState.Error) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(Dimens.SpaceMd),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    TextButton(onClick = { pagingItems.retry() }) {
-                        Text("Tải thêm thất bại — Thử lại")
-                    }
-                }
-            }
-        }
     }
 }
 

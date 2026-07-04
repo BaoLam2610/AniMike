@@ -17,18 +17,18 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.lambao.animike.ui.browse.BrowseScreen
 import com.lambao.animike.ui.detail.DetailScreen
 import com.lambao.animike.ui.favorites.FavoritesScreen
 import com.lambao.animike.ui.home.HomeScreen
 import com.lambao.animike.ui.search.SearchScreen
-import com.lambao.animike.ui.seasonarchive.SeasonArchiveScreen
 
 private data class BottomNavItem(val route: String, val label: String, val icon: String)
 
 private val bottomNavItems = listOf(
     BottomNavItem(Routes.HOME, "Trang chủ", "⌂"),
     BottomNavItem(Routes.SEARCH, "Tìm kiếm", "🔍"),
-    BottomNavItem(Routes.SEASON_ARCHIVE, "Mùa", "📅"),
+    BottomNavItem(Routes.BROWSE, "Duyệt", "📅"),
     BottomNavItem(Routes.FAVORITES, "Yêu thích", "♥"),
 )
 
@@ -75,8 +75,8 @@ fun AniMikeNavHost() {
                     onNavigateToDetail = { malId -> navController.navigate(Routes.detail(malId)) },
                 )
             }
-            composable(Routes.SEASON_ARCHIVE) {
-                SeasonArchiveScreen(
+            composable(Routes.BROWSE) {
+                BrowseScreen(
                     onNavigateToDetail = { malId -> navController.navigate(Routes.detail(malId)) },
                 )
             }
