@@ -21,4 +21,9 @@ object Dimens {
     val RadiusCard = 12.dp
     val RadiusButton = 12.dp
     val RadiusSheet = 20.dp
+
+    // Detail screen
+    val HeroHeaderHeight = 360.dp
+    val IconButtonSize = 40.dp
+    val AvatarSize = 64.dp
 }

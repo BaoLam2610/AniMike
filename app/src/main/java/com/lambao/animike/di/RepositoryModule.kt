@@ -1,5 +1,7 @@
 package com.lambao.animike.di
 
+import com.lambao.animike.data.repository.AnimeDetailRepository
+import com.lambao.animike.data.repository.AnimeDetailRepositoryImpl
 import com.lambao.animike.data.repository.AnimeRepository
 import com.lambao.animike.data.repository.AnimeRepositoryImpl
 import dagger.Binds
@@ -15,4 +17,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindAnimeRepository(impl: AnimeRepositoryImpl): AnimeRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindAnimeDetailRepository(impl: AnimeDetailRepositoryImpl): AnimeDetailRepository
 }

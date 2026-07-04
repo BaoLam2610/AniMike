@@ -7,6 +7,7 @@ import com.lambao.animike.domain.model.toUserMessage
 import com.lambao.animike.ui.base.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,21 +36,33 @@ class HomeViewModel @Inject constructor(
     }
 
     override fun onEvent(event: HomeEvent) {
+        // cancelAndJoin thay vì cancel() suông — job cũ có thể vừa thoát
+        // withLock (không phải suspend point) và set state cũ đè lên state
+        // của lần retry nếu không đợi nó dừng hẳn.
         when (event) {
             is HomeEvent.OnAnimeClick -> sendEffect(HomeEffect.NavigateToDetail(event.malId))
             HomeEvent.OnRetrySeasonNow -> {
-                seasonNowJob?.cancel()
-                seasonNowJob = viewModelScope.launch { loadSeasonNow() }
+                val previous = seasonNowJob
+                seasonNowJob = viewModelScope.launch {
+                    previous?.cancelAndJoin()
+                    loadSeasonNow()
+                }
             }
 
             HomeEvent.OnRetryTopAnime -> {
-                topAnimeJob?.cancel()
-                topAnimeJob = viewModelScope.launch { loadTopAnime() }
+                val previous = topAnimeJob
+                topAnimeJob = viewModelScope.launch {
+                    previous?.cancelAndJoin()
+                    loadTopAnime()
+                }
             }
 
             HomeEvent.OnRetryUpcoming -> {
-                upcomingJob?.cancel()
-                upcomingJob = viewModelScope.launch { loadUpcoming() }
+                val previous = upcomingJob
+                upcomingJob = viewModelScope.launch {
+                    previous?.cancelAndJoin()
+                    loadUpcoming()
+                }
             }
         }
     }

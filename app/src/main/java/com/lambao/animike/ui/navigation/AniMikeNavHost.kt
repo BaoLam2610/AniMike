@@ -22,9 +22,12 @@ fun AniMikeNavHost() {
         composable(
             route = Routes.DETAIL,
             arguments = listOf(navArgument(Routes.DETAIL_ARG_MAL_ID) { type = NavType.IntType }),
-        ) { backStackEntry ->
-            val malId = backStackEntry.arguments?.getInt(Routes.DETAIL_ARG_MAL_ID) ?: return@composable
-            DetailScreen(malId = malId, onBackClick = navController::popBackStack)
+        ) {
+            // malId được DetailViewModel tự đọc qua SavedStateHandle, không cần truyền tay.
+            DetailScreen(
+                onBackClick = navController::popBackStack,
+                onNavigateToDetail = { malId -> navController.navigate(Routes.detail(malId)) },
+            )
         }
     }
 }
