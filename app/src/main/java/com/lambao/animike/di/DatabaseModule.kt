@@ -7,6 +7,8 @@ import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
 import com.lambao.animike.data.local.dao.FavoriteDao
 import com.lambao.animike.data.local.dao.GenreDao
+import com.lambao.animike.data.local.dao.PictureDao
+import com.lambao.animike.data.local.dao.ReviewPreviewDao
 import com.lambao.animike.data.local.dao.SeasonYearDao
 import dagger.Module
 import dagger.Provides
@@ -45,4 +47,10 @@ object DatabaseModule {
 
     @Provides
     fun provideSeasonYearDao(database: AppDatabase): SeasonYearDao = database.seasonYearDao()
+
+    @Provides
+    fun providePictureDao(database: AppDatabase): PictureDao = database.pictureDao()
+
+    @Provides
+    fun provideReviewPreviewDao(database: AppDatabase): ReviewPreviewDao = database.reviewPreviewDao()
 }

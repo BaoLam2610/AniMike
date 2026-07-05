@@ -34,8 +34,12 @@ class DetailViewModel @Inject constructor(
 
     init {
         // Room là nguồn hiển thị duy nhất cho detail — collect Flow suốt vòng
-        // đời màn hình; loadAll() chỉ quyết định KHI NÀO gọi API.
+        // đời màn hình; loadAll() chỉ quyết định KHI NÀO gọi API. Riêng
+        // Episodes KHÔNG có Flow riêng — one-shot, set thẳng trong loadAll().
         observeCachedDetail()
+        observeRecommendations()
+        observeReviewPreview()
+        observePictures()
         observeFavoriteStatus()
         loadJob = viewModelScope.launch { loadAll() }
     }
@@ -53,9 +57,17 @@ class DetailViewModel @Inject constructor(
                 }
             }
 
-            DetailEvent.OnTrailerClick -> {
-                currentState().detail?.trailerYoutubeId?.let { sendEffect(DetailEffect.OpenYoutube(it)) }
+            DetailEvent.OnPullToRefresh -> {
+                val previous = loadJob
+                loadJob = viewModelScope.launch {
+                    setState { copy(isRefreshing = true) }
+                    previous?.cancelAndJoin()
+                    loadAll(force = true)
+                    setState { copy(isRefreshing = false) }
+                }
             }
+
+            is DetailEvent.OnTrailerClick -> sendEffect(DetailEffect.OpenYoutube(event.youtubeId))
 
             DetailEvent.OnFavoriteClick -> {
                 // Bỏ qua nếu lần toggle trước chưa xong — tránh double-tap bắn
@@ -96,6 +108,30 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    private fun observeRecommendations() {
+        viewModelScope.launch {
+            repository.observeRecommendations(malId).collect { recommendations ->
+                setState { copy(recommendations = recommendations) }
+            }
+        }
+    }
+
+    private fun observeReviewPreview() {
+        viewModelScope.launch {
+            repository.observeReviewPreview(malId).collect { reviews ->
+                setState { copy(reviews = reviews) }
+            }
+        }
+    }
+
+    private fun observePictures() {
+        viewModelScope.launch {
+            repository.observePictures(malId).collect { pictures ->
+                setState { copy(pictures = pictures) }
+            }
+        }
+    }
+
     private fun observeFavoriteStatus() {
         viewModelScope.launch {
             favoriteRepository.observeIsFavorite(malId).collect { isFavorite ->
@@ -125,30 +161,25 @@ class DetailViewModel @Inject constructor(
             }
         }
 
-        // Nhân vật/đề xuất/tập/reviews không critical — lỗi thì section tương ứng để trống.
+        // Nhân vật/tập không critical — lỗi thì section tương ứng để trống.
         val charactersResult = loadMutex.withLock { repository.getCharacters(malId) }
         if (charactersResult is ApiResult.Success) {
             setState { copy(characters = charactersResult.data) }
         }
 
-        val recommendationsResult = loadMutex.withLock { repository.getRecommendations(malId) }
-        if (recommendationsResult is ApiResult.Success) {
-            setState { copy(recommendations = recommendationsResult.data) }
-        }
-
+        // Episodes KHÔNG cache — luôn gọi lại, set thẳng ở đây (không qua Flow
+        // như 3 mục dưới vì không có Room đứng giữa).
         val episodesResult = loadMutex.withLock { repository.getEpisodes(malId) }
         if (episodesResult is ApiResult.Success) {
             setState { copy(episodes = episodesResult.data) }
         }
 
-        val reviewsResult = loadMutex.withLock { repository.getReviews(malId) }
-        if (reviewsResult is ApiResult.Success) {
-            setState { copy(reviews = reviewsResult.data) }
-        }
-
-        val picturesResult = loadMutex.withLock { repository.getPictures(malId) }
-        if (picturesResult is ApiResult.Success) {
-            setState { copy(pictures = picturesResult.data) }
-        }
+        // Recommendations/reviews/pictures: không setState thủ công — 3 hàm
+        // observeXxx() (Flow từ Room) trong init đã tự cập nhật state reactively
+        // khi refresh xong. refreshXxx tự quyết định gọi API hay không dựa TTL
+        // (force=true khi pull-to-refresh sẽ bỏ qua TTL).
+        loadMutex.withLock { repository.refreshRecommendations(malId, force) }
+        loadMutex.withLock { repository.refreshReviewPreview(malId, force) }
+        loadMutex.withLock { repository.refreshPictures(malId, force) }
     }
 }

@@ -36,11 +36,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,6 +59,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -113,6 +117,7 @@ fun DetailScreen(
     DetailScreenContent(state = state, onBackClick = onBackClick, onEvent = viewModel::onEvent)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DetailScreenContent(
     state: DetailState,
@@ -131,15 +136,24 @@ private fun DetailScreenContent(
             when {
                 // Cache-first: đã có detail (từ Room) thì luôn hiện, kể cả khi
                 // đang refresh nền hoặc refresh vừa lỗi (stale-while-revalidate).
-                state.detail != null -> DetailContent(
-                    detail = state.detail,
-                    characters = state.characters,
-                    recommendations = state.recommendations,
-                    episodes = state.episodes,
-                    reviews = state.reviews,
-                    pictures = state.pictures,
-                    onEvent = onEvent,
-                )
+                // Pull-to-refresh (docs/ROADMAP.md mục 3b) — force refresh
+                // detail + recommendations/reviews/pictures bất kể TTL. Episodes
+                // không cần force vì vốn đã luôn gọi lại API ở mọi lần loadAll().
+                state.detail != null -> PullToRefreshBox(
+                    isRefreshing = state.isRefreshing,
+                    onRefresh = { onEvent(DetailEvent.OnPullToRefresh) },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    DetailContent(
+                        detail = state.detail,
+                        characters = state.characters,
+                        recommendations = state.recommendations,
+                        episodes = state.episodes,
+                        reviews = state.reviews,
+                        pictures = state.pictures,
+                        onEvent = onEvent,
+                    )
+                }
 
                 state.isLoading -> LoadingContent()
 
@@ -202,11 +216,12 @@ private fun DetailContent(
             item { GenreChips(genres = detail.genres) }
         }
 
-        if (detail.trailerYoutubeId != null) {
+        val trailerYoutubeId = detail.trailerYoutubeId
+        if (trailerYoutubeId != null) {
             item {
                 TrailerCard(
                     thumbnailUrl = detail.trailerThumbnailUrl,
-                    onClick = { onEvent(DetailEvent.OnTrailerClick) },
+                    onClick = { onEvent(DetailEvent.OnTrailerClick(trailerYoutubeId)) },
                 )
             }
         }
@@ -389,6 +404,12 @@ private fun GenreChips(genres: List<String>) {
 // vị trí tương ứng nút "Play" pill trong kit (32_Dark_anime episode details):
 // trailer là nội dung video duy nhất app có (Jikan không có video tập phim,
 // xem FEATURES.md mục 4), nên nó xứng đáng ngôn ngữ hình ảnh của một video.
+// Bấm vào ĐIỀU HƯỚNG SANG APP YOUTUBE (không nhúng WebView trong app nữa) —
+// YouTube đã siết chặn embed player từ phía họ (lỗi "Error 153", xảy ra diện
+// rộng không riêng app này), nên nhúng qua WebView không còn đáng tin cậy.
+// onClick chỉ gửi DetailEvent — startActivity() thật sự nằm ở DetailEffect.
+// OpenYoutube xử lý trong LaunchedEffect của DetailScreen (như 4 effect điều
+// hướng khác), không gọi thẳng trong composable này (quy tắc MVI CLAUDE.md).
 @Composable
 private fun TrailerCard(thumbnailUrl: String?, onClick: () -> Unit) {
     Box(
@@ -397,7 +418,7 @@ private fun TrailerCard(thumbnailUrl: String?, onClick: () -> Unit) {
             .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm)
             .aspectRatio(16f / 9f)
             .clip(RoundedCornerShape(Dimens.RadiusCard))
-            .clickable(onClickLabel = "Xem trailer", onClick = onClick),
+            .clickable(onClickLabel = "Xem trailer trên YouTube", role = Role.Button, onClick = onClick),
     ) {
         val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
         val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
@@ -413,12 +434,16 @@ private fun TrailerCard(thumbnailUrl: String?, onClick: () -> Unit) {
             fallback = placeholderPainter,
             modifier = Modifier.fillMaxSize(),
         )
-        // Scrim nhẹ để play button + label luôn nổi trên mọi thumbnail sáng/tối.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.3f)),
-        )
+        // Gradient đáy (0->85%, khớp hero header) thay vì scrim phẳng cũ —
+        // scrim phẳng 30% không đủ tương phản khi thumbnail nền sáng/trắng
+        // (hqdefault của 1 số video chỉ là ảnh placeholder màu nhạt), label
+        // "Xem trailer" bị chìm mất. Gradient đáy luôn đảm bảo vùng chữ tối
+        // đủ, bất kể độ sáng của thumbnail.
+        val background = MaterialTheme.colorScheme.background
+        val gradient = remember(background) {
+            Brush.verticalGradient(colors = listOf(Color.Transparent, background.copy(alpha = 0.85f)))
+        }
+        Box(modifier = Modifier.fillMaxSize().background(gradient))
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
@@ -428,9 +453,15 @@ private fun TrailerCard(thumbnailUrl: String?, onClick: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "▶",
+                // Variation selector ︎: ép render dạng text đơn sắc, một
+                // số font/thiết bị sẽ hiện ▶ dạng emoji màu nếu thiếu nó.
+                text = "▶︎",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimary,
+                // clickable ở Box cha đã merge semantics + onClickLabel "Xem
+                // trailer" — ẩn glyph này khỏi TalkBack để khỏi đọc thừa
+                // "black right-pointing triangle".
+                modifier = Modifier.clearAndSetSemantics {},
             )
         }
         Text(
@@ -795,6 +826,9 @@ private fun PictureViewerDialog(pictures: List<String>, initialPage: Int, onDism
                     text = "✕",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
+                    // Box cha đã có contentDescription "Đóng" — ẩn glyph khỏi
+                    // TalkBack để khỏi đọc thừa "Đóng, multiplication sign".
+                    modifier = Modifier.clearAndSetSemantics {},
                 )
             }
 

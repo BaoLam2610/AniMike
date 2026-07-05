@@ -48,9 +48,10 @@ interface JikanApi {
     // /videos/episodes (KHÔNG phải /episodes) — có thumbnail + trả sẵn thứ tự
     // mới nhất trước, đúng thứ tự muốn hiển thị (xem comment ở EpisodeDto).
     // Dùng ở 2 nơi: AnimeDetailRepository.getEpisodes() gọi 1 lần page=1 cho
-    // preview 10 tập trong Detail; AnimeEpisodesPagingSource gọi phân trang
-    // đầy đủ cho EpisodesScreen ("Xem tất cả") — 2 request page=1 riêng biệt
-    // khi mở "Xem tất cả" từ Detail (không share cache, chấp nhận cho MVP).
+    // preview trong Detail (KHÔNG cache — luôn gọi lại, xem comment ở
+    // AnimeDetailRepository); AnimeEpisodesPagingSource gọi phân trang đầy đủ
+    // cho EpisodesScreen ("Xem tất cả") — 2 request page=1 riêng biệt khi mở
+    // "Xem tất cả" từ Detail (chấp nhận được vì dữ liệu vốn không cache).
     @GET("anime/{id}/videos/episodes")
     suspend fun getEpisodes(@Path("id") id: Int, @Query("page") page: Int = 1): JikanListResponse<EpisodeDto>
 

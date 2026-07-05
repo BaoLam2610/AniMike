@@ -12,7 +12,7 @@ import java.io.IOException
  * Chỉ bắt HttpException/IOException — không catch(Exception) rộng, đúng
  * anti-pattern list trong compose-expert/references/paging-mvi-testing.md.
  * Dùng cho màn EpisodesScreen (xem tất cả) — preview trong Detail vẫn dùng
- * AnimeDetailRepository.getEpisodes() one-shot (chỉ cần 10 tập đầu).
+ * AnimeDetailRepository.getEpisodes() one-shot (không cache, luôn gọi lại).
  */
 class AnimeEpisodesPagingSource(
     private val api: JikanApi,

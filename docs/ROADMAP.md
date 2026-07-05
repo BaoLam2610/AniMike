@@ -72,32 +72,46 @@ Khai báo trong `gradle/libs.versions.toml` rồi thêm vào `app/build.gradle.k
   search không cache. Jikan không hỗ trợ HTTP cache/ETag (đã verify) nên đây là
   tầng cache duy nhất — chi tiết trong `.claude/skills/jikan-api/SKILL.md` mục Caching
 
-## 3b. [Chưa làm] Cache cho dữ liệu phụ ở Detail (Characters/Episodes/Recommendations/Reviews)
+## 3b. Cache cho dữ liệu phụ ở Detail (Characters/Episodes/Recommendations/Reviews/Pictures)
 
-Hiện tại 4 mục này (nhân vật, tập, đề xuất, đánh giá) ở màn Detail **không cache
-Room** — mỗi lần mở Detail đều gọi lại API (xem comment ở
-`AnimeDetailRepository.kt`, lý do ban đầu: "refetch rẻ hơn thêm entity/DAO").
-Việc này ổn cho MVP nhưng tốn request lặp lại không cần thiết khi user vào ra
-Detail nhiều lần. Ý tưởng khi làm (ưu tiên thấp, không chặn MVP3):
+- [x] **Episodes: KHÔNG cache, luôn gọi lại** ✅ — quyết định rõ ràng của
+  user: tập mới có thể ra bất cứ lúc nào, cache (dù có TTL ngắn) vẫn có nguy
+  cơ hiện thiếu tập mới ngay lúc mở Detail — trải nghiệm tệ hơn cái giá phải
+  trả (1 request `/videos/episodes` mỗi lần vào màn). `getEpisodes()` vẫn
+  one-shot như trước, không đổi. (Lưu ý: session này ban đầu từng thử cache
+  Episodes + TTL theo `isAiring` — đã revert hoàn toàn vì hiểu sai yêu cầu.)
+- [x] **Recommendations/Pictures/Reviews(preview): cache Room + SWR** ✅ —
+  ngược lại với Episodes, 3 mục này KHÔNG cần tươi theo từng phút/giờ nên
+  đáng cache để tránh gọi lại API mỗi lần user vào/ra Detail:
+  - **Recommendations**: tái dùng bảng `cached_anime_list`/`AnimeListDao` sẵn
+    có (key `detail_recommendations_{malId}`, xem `AnimeListKey`) thay vì
+    thêm entity/DAO riêng — shape `Anime` đã khớp. TTL 7 ngày
+    (`CacheTtl.RECOMMENDATIONS_MS`) vì đề xuất của 1 anime hiếm khi đổi.
+  - **Pictures**: bảng mới `cached_picture` (`malId`, `url`, `position`,
+    `fetchedAt`). TTL 7 ngày (`CacheTtl.PICTURES_MS`) — poster art gần như tĩnh.
+  - **Reviews (preview)**: bảng mới `cached_review_preview` (`malId`,
+    `reviewId`, `username`, `score`, `reviewText`, `position`, `fetchedAt`),
+    vẫn cắt còn `REVIEWS_LIMIT` (5) trước khi cache. TTL 24h
+    (`CacheTtl.REVIEWS_PREVIEW_MS`, ngắn hơn 2 mục trên) vì user MAL đăng
+    review liên tục. KHÔNG ảnh hưởng `reviewsPagingSource` (Paging 3 riêng
+    cho ReviewsScreen "Xem tất cả").
+  - Cả 3 dùng sentinel row (id âm/url rỗng) khi API trả rỗng thật, để
+    `getFetchedAt` (MIN aggregate) không trả `null` mãi mãi và gây cache-miss
+    vĩnh viễn — lọc bỏ sentinel khi đọc ra domain model.
+  - Characters giữ nguyên cache tạm trong bộ nhớ (5 phút) như cũ, không đổi.
+  - Pull-to-refresh ở Detail (`DetailEvent.OnPullToRefresh`) force-refresh cả
+    `/full` lẫn 3 cache này (bỏ qua TTL); Episodes không cần "force" vì vốn
+    đã luôn gọi lại. DB version 4→5 (thêm `cached_picture`/`cached_review_preview`,
+    bỏ bảng episode cache không dùng nữa — destructive migration, chấp nhận
+    được vì chưa có user thật).
 
-- Áp SWR (giống Home/Detail chính) cho cả 4 mục: entity riêng theo `malId`
-  (+ `fetchedAt`), Flow từ Room hiện ngay cache cũ, refresh nền theo TTL.
-- **"Các tập" chỉ cache đúng phần preview (10 tập đầu)** — khớp với những gì
-  user thực sự thấy ở Detail, không cache cả list đầy đủ của EpisodesScreen
-  (màn đó đã tự paginate qua Paging 3, không cần Room).
-- **TTL nên khác nhau theo bản chất dữ liệu, không dùng 1 con số chung**:
-  - Characters, Recommendations: gần như tĩnh (nhân vật/đề xuất của 1 anime
-    hiếm khi đổi) → TTL dài, ví dụ 7 ngày như genres.
-  - Reviews: user MAL đăng review liên tục bất kể anime đang chiếu hay đã
-    xong → TTL ngắn hơn, ví dụ 24h giống list thường.
-  - **Episodes: TTL nên phụ thuộc `AnimeDetail.isAiring`** (field đã có sẵn,
-    không cần gọi thêm API để biết) — anime đang chiếu (`isAiring = true`) có
-    thể ra tập mới bất cứ lúc nào → TTL ngắn (vài giờ); anime đã kết thúc
-    (`isAiring = false`) thì danh sách tập gần như đóng băng vĩnh viễn → TTL
-    dài (7+ ngày, hoặc coi như never-expire vì user vẫn có thể force-refresh
-    thủ công nếu nghi ngờ). Đây là câu trả lời cho vấn đề "không rõ lịch cập
-    nhật của Jikan" — không cần đoán lịch của Jikan, chỉ cần dùng tín hiệu
-    airing status mình đã có sẵn cục bộ để quyết định độ tin cậy của cache.
+- [ ] **[Chưa làm] Dọn cache phình theo thời gian** — `cached_anime_list`
+  (bucket `detail_recommendations_{malId}`), `cached_picture`,
+  `cached_review_preview` mỗi bảng tích lũy VĨNH VIỄN 1 bucket riêng cho MỖI
+  anime user từng mở Detail (khác 3 key cố định của Home luôn ghi đè tại
+  chỗ) — không có cơ chế dọn dẹp. Không chặn vì kích thước mỗi bucket rất nhỏ
+  (vài chục row), nhưng nên có ý tưởng dọn khi làm tiếp: ví dụ purge bucket
+  cũ hơn N×TTL lúc app khởi động, hoặc giới hạn tổng số bucket kiểu LRU.
 
 ## 4. Roadmap theo phase
 
@@ -189,6 +203,22 @@ Triển khai lần lượt từng đợt, mỗi đợt: code → build → compo
   schema Room). Kèm fix data: `trailer.youtube_id` đôi khi null dù trailer
   tồn tại (VD anime 38524 chỉ có `embed_url`) — mapper rút id từ
   `embed_url`/`url` làm fallback.
+- [x] **Phát sinh: Phát trailer trong app (thử, đã revert)** — thử nhúng
+  WebView phát YouTube embed player ngay trong app (2 vòng: dialog full-screen
+  → inline trong màn Detail, kèm fix lỗi "màn hình trắng" bằng
+  `loadDataWithBaseURL` bọc `<iframe>`). **Revert lại điều hướng sang app
+  YouTube** vì YouTube đã siết chặn embed player diện rộng phía họ (lỗi
+  "Error 153", không phải bug riêng của app này, không có cách khắc phục từ
+  phía client) — xem thảo luận: reddit.com/r/ObsidianMD/comments/1ogzv1s.
+  `TrailerCard` giờ chỉ còn là thumbnail 16:9 + play overlay mở
+  `youtube.com/watch?v={id}` qua Intent (như bản đầu tiên), không còn
+  WebView/Dialog. Cũng sửa contrast label "Xem trailer" (gradient đáy 0→85%
+  thay scrim phẳng 30% — scrim cũ không đủ tối khi thumbnail nền sáng).
+  Khôi phục đúng kiến trúc MVI ban đầu: `TrailerCard` chỉ gửi
+  `DetailEvent.OnTrailerClick(youtubeId)`, `startActivity()` thật sự nằm ở
+  `DetailEffect.OpenYoutube` xử lý trong `LaunchedEffect` của DetailScreen
+  (như 4 effect điều hướng khác) — bản revert đầu tiên lỡ gọi `startActivity`
+  thẳng trong composable, bị compose-reviewer bắt lỗi và sửa lại.
 - [ ] Polish motion/transition giữa các màn hình (sau cùng, khi các màn đã ổn định)
 
 Tính năng mở rộng Detail (từng nằm ở MVP 3 cũ, chuyển sang MVP 4 vì thuộc nhóm dữ liệu mới):
