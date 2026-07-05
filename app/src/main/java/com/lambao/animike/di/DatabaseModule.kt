@@ -5,8 +5,10 @@ import androidx.room.Room
 import com.lambao.animike.data.local.AppDatabase
 import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
+import com.lambao.animike.data.local.dao.CharacterDao
 import com.lambao.animike.data.local.dao.FavoriteDao
 import com.lambao.animike.data.local.dao.GenreDao
+import com.lambao.animike.data.local.dao.NewEpisodeDao
 import com.lambao.animike.data.local.dao.PictureDao
 import com.lambao.animike.data.local.dao.ReviewPreviewDao
 import com.lambao.animike.data.local.dao.SeasonYearDao
@@ -53,4 +55,10 @@ object DatabaseModule {
 
     @Provides
     fun provideReviewPreviewDao(database: AppDatabase): ReviewPreviewDao = database.reviewPreviewDao()
+
+    @Provides
+    fun provideNewEpisodeDao(database: AppDatabase): NewEpisodeDao = database.newEpisodeDao()
+
+    @Provides
+    fun provideCharacterDao(database: AppDatabase): CharacterDao = database.characterDao()
 }

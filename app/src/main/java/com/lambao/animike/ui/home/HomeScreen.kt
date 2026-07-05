@@ -2,6 +2,9 @@ package com.lambao.animike.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +26,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -30,19 +34,22 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -52,10 +59,12 @@ import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeListSource
 import com.lambao.animike.ui.components.AnimeCard
 import com.lambao.animike.ui.components.AnimeCardPlaceholder
+import com.lambao.animike.ui.components.NewEpisodeCard
 import com.lambao.animike.ui.components.rememberShimmerProgress
 import com.lambao.animike.ui.components.shimmerEffect
 import com.lambao.animike.ui.theme.AniMikeTheme
 import com.lambao.animike.ui.theme.Dimens
+import kotlinx.coroutines.delay
 
 // Số trang hero slider (Season Now) và số item preview mỗi section ngang —
 // API/Room vẫn giữ nguyên 25 item/list (không đổi schema cache), UI chỉ
@@ -63,10 +72,16 @@ import com.lambao.animike.ui.theme.Dimens
 private const val HERO_PAGE_COUNT = 5
 private const val SECTION_PREVIEW_LIMIT = 10
 
+// Auto-slide hero: chuyển trang mỗi 5s, kiểm tra theo tick 200ms để có thể
+// tạm dừng/tiếp tục đếm dở dang khi user chạm/thả tay (không reset về 0).
+private const val HERO_AUTO_ADVANCE_MS = 5000L
+private const val HERO_AUTO_ADVANCE_TICK_MS = 200L
+
 @Composable
 fun HomeScreen(
     onNavigateToDetail: (Int) -> Unit,
     onNavigateToAnimeList: (AnimeListSource) -> Unit,
+    onNavigateToNewEpisodes: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -77,6 +92,7 @@ fun HomeScreen(
                 is HomeEffect.NavigateToDetail -> onNavigateToDetail(effect.malId)
                 HomeEffect.NavigateToTopAnime -> onNavigateToAnimeList(AnimeListSource.TOP)
                 HomeEffect.NavigateToUpcoming -> onNavigateToAnimeList(AnimeListSource.UPCOMING)
+                HomeEffect.NavigateToNewEpisodes -> onNavigateToNewEpisodes()
             }
         }
     }
@@ -93,29 +109,21 @@ private fun HomeScreenContent(
     // contentWindowInsets = 0: AniMikeNavHost đã có Scaffold ngoài tiêu thụ
     // insets cho bottom nav — tránh tiêu thụ 2 lần gây khoảng trắng dư.
     Scaffold(modifier = Modifier.fillMaxSize(), contentWindowInsets = WindowInsets(0)) { padding ->
-        Box(
+        // Column (không phải Box overlay) — header chiếm không gian riêng của
+        // nó, đẩy hero xuống dưới thay vì đè lên. Header vẫn "neo cố định" vì
+        // là sibling NGOÀI LazyColumn nên không cuộn theo, chỉ khác là không
+        // còn nổi trong suốt trên hero lúc mới vào màn nữa (theo yêu cầu user —
+        // trước đó cố ý làm overlay theo kit Animax, nay đổi lại).
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            val pullState = rememberPullToRefreshState()
+            HomeTopBar()
             PullToRefreshBox(
                 isRefreshing = state.isRefreshing,
                 onRefresh = { onEvent(HomeEvent.OnPullToRefresh) },
-                state = pullState,
-                modifier = Modifier.fillMaxSize(),
-                // Indicator mặc định nằm TopCenter — đúng vùng bar "AniMike"
-                // pinned đè lên (bar vẽ sau trong Box). Đẩy xuống dưới bar để
-                // thấy rõ trạng thái đang kéo/refresh.
-                indicator = {
-                    PullToRefreshDefaults.Indicator(
-                        state = pullState,
-                        isRefreshing = state.isRefreshing,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = Dimens.SpaceXxl),
-                    )
-                },
+                modifier = Modifier.weight(1f),
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -143,6 +151,22 @@ private fun HomeScreenContent(
                         )
                     }
                     item {
+                        RandomAnimeCard(
+                            isLoading = state.isLoadingRandom,
+                            onClick = { onEvent(HomeEvent.OnRandomAnimeClick) },
+                        )
+                    }
+                    // Lỗi request thật (429/404/mất mạng...) — hiện inline
+                    // ngay dưới card, không im lặng bỏ qua như trước.
+                    if (state.randomAnimeError != null) {
+                        item {
+                            SectionError(
+                                message = state.randomAnimeError,
+                                onRetry = { onEvent(HomeEvent.OnRandomAnimeClick) },
+                            )
+                        }
+                    }
+                    item {
                         AnimeSection(
                             title = "Top Hits Anime",
                             section = state.topAnime,
@@ -161,26 +185,29 @@ private fun HomeScreenContent(
                             onSeeAllClick = { onEvent(HomeEvent.OnSeeAllUpcomingClick) },
                         )
                     }
+                    item {
+                        NewEpisodesSection(
+                            section = state.newEpisodes,
+                            onRetry = { onEvent(HomeEvent.OnRetryNewEpisodes) },
+                            onAnimeClick = { onEvent(HomeEvent.OnAnimeClick(it)) },
+                            onSeeAllClick = { onEvent(HomeEvent.OnSeeAllNewEpisodesClick) },
+                        )
+                    }
                 }
             }
-
-            // Header neo cố định đè lên nội dung cuộn (kit Animax đè logo lên
-            // hero) — nằm NGOÀI LazyColumn nên không bao giờ cuộn mất.
-            HomeTopBar(modifier = Modifier.align(Alignment.TopCenter))
         }
     }
 }
 
 @Composable
-private fun HomeTopBar(modifier: Modifier = Modifier) {
+private fun HomeTopBar() {
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            // Nền bán trong suốt giả lập frosted-glass: nội dung cuộn bên dưới
-            // vẫn ánh qua nhẹ. Blur backdrop THẬT cần RenderEffect (API 31+)
-            // hoặc thư viện Haze — Compose không blur được "phần phía sau"
-            // một cách chính thống; nếu muốn nâng cấp thì thêm Haze sau.
-            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.85f))
+            // Không còn overlay lên hero nữa (Column chiếm không gian riêng)
+            // nên không cần nền bán trong suốt/frosted-glass như trước — nền
+            // đặc khớp luôn với background chung của màn.
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -189,6 +216,68 @@ private fun HomeTopBar(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
         )
+    }
+}
+
+// MVP4 "Hôm nay xem gì?" (/random/anime) — không có mockup trong kit, thiết
+// kế tự do theo token animike-design: card ngang, icon dice bên trái, bấm vào
+// gọi API rồi điều hướng thẳng sang Detail của anime ngẫu nhiên trả về.
+@Composable
+private fun RandomAnimeCard(isLoading: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding)
+            .clip(RoundedCornerShape(Dimens.RadiusCard))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(
+                enabled = !isLoading,
+                onClickLabel = "Xem anime ngẫu nhiên",
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .padding(Dimens.SpaceMd),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
+    ) {
+        if (isLoading) {
+            // Quy ước "loading = shimmer, không spinner" của animike-design
+            // áp cho loading TOÀN MÀN — đây là busy-state của riêng 1 nút bấm
+            // (đổi chỗ icon dice trong lúc chờ), không phải trạng thái tải cả
+            // section/màn hình, nên CircularProgressIndicator phù hợp hơn shimmer.
+            CircularProgressIndicator(
+                modifier = Modifier.size(Dimens.IconButtonSize),
+                color = MaterialTheme.colorScheme.primary,
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(Dimens.IconButtonSize)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                // "Xem anime ngẫu nhiên" ở clickable cha đã đủ cho TalkBack —
+                // ẩn glyph trang trí này để khỏi đọc thừa "dấu xúc xắc".
+                Text(
+                    text = "🎲",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.clearAndSetSemantics {},
+                )
+            }
+        }
+        Column {
+            Text(
+                text = "Hôm nay xem gì?",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Text(
+                text = "Khám phá ngẫu nhiên 1 bộ anime",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -234,20 +323,66 @@ private fun HeroPager(
         // pageCount là lambda — PagerState tự cập nhật khi list SWR refresh
         // đổi kích thước, không cần key lại remember.
         val pagerState = rememberPagerState { heroes.size }
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxWidth().height(Dimens.HeroHeaderHeight),
-            // key theo malId: khi SWR refresh đổi thứ tự Season Now, pager giữ
-            // đúng anime đang xem thay vì "hoán đổi" nội dung theo index.
-            key = { heroes[it].malId },
-        ) { pageIndex ->
-            val anime = heroes[pageIndex]
-            HeroPage(
-                anime = anime,
-                isFavorite = anime.malId in favoriteIds,
-                onClick = { onHeroClick(anime.malId) },
-                onFavoriteClick = { onFavoriteClick(anime.malId) },
-            )
+
+        // Tự động chuyển slide mỗi 5s — tạm dừng khi ngón tay đang chạm (không
+        // reset về 0, chỉ đứng yên), thả tay ra thì đếm tiếp phần thời gian
+        // còn lại thay vì tính lại từ đầu.
+        var isPressed by remember { mutableStateOf(false) }
+        LaunchedEffect(pagerState, heroes.size) {
+            if (heroes.size <= 1) return@LaunchedEffect
+            var elapsedMs = 0L
+            var lastPage = pagerState.currentPage
+            while (true) {
+                delay(HERO_AUTO_ADVANCE_TICK_MS)
+                if (pagerState.currentPage != lastPage) {
+                    // User tự vuốt đổi trang — reset đếm giờ, không cộng dồn
+                    // tiếp từ trang cũ.
+                    lastPage = pagerState.currentPage
+                    elapsedMs = 0L
+                    continue
+                }
+                // isScrollInProgress: che luôn khoảng fling ngắn sau khi nhả
+                // tay, không chỉ lúc ngón tay còn chạm (isPressed).
+                if (isPressed || pagerState.isScrollInProgress) continue
+                elapsedMs += HERO_AUTO_ADVANCE_TICK_MS
+                if (elapsedMs >= HERO_AUTO_ADVANCE_MS) {
+                    elapsedMs = 0L
+                    pagerState.animateScrollToPage((pagerState.currentPage + 1) % heroes.size)
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(Dimens.HeroHeaderHeight)
+                // Chỉ quan sát down/up để tạm dừng auto-advance, KHÔNG consume
+                // — HorizontalPager bên trong vẫn nhận đủ sự kiện để tự vuốt
+                // trang bình thường.
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        isPressed = true
+                        waitForUpOrCancellation()
+                        isPressed = false
+                    }
+                },
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                // key theo malId: khi SWR refresh đổi thứ tự Season Now, pager giữ
+                // đúng anime đang xem thay vì "hoán đổi" nội dung theo index.
+                key = { heroes[it].malId },
+            ) { pageIndex ->
+                val anime = heroes[pageIndex]
+                HeroPage(
+                    anime = anime,
+                    isFavorite = anime.malId in favoriteIds,
+                    onClick = { onHeroClick(anime.malId) },
+                    onFavoriteClick = { onFavoriteClick(anime.malId) },
+                )
+            }
         }
         Row(
             modifier = Modifier
@@ -381,6 +516,82 @@ private fun AnimeSection(
 
             section.isLoading -> {
                 // Hoist 1 animation dùng chung cho cả 6 placeholder của section này
+                val shimmerProgress = rememberShimmerProgress()
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
+                ) {
+                    items(6, key = { it }) {
+                        AnimeCardPlaceholder(
+                            progress = shimmerProgress,
+                            modifier = Modifier.width(Dimens.CardWidth),
+                        )
+                    }
+                }
+            }
+
+            section.error != null -> SectionError(message = section.error, onRetry = onRetry)
+
+            else -> Text(
+                text = "Chưa có dữ liệu",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+            )
+        }
+    }
+}
+
+// MVP4 "Tập mới phát hành" (kit Animax "New Episode Releases") — cùng cấu
+// trúc header/preview/loading/error với AnimeSection, chỉ khác kiểu dữ liệu
+// (NewEpisodeRelease không phải Anime) nên tách composable riêng thay vì cố
+// generic hóa AnimeSection.
+@Composable
+private fun NewEpisodesSection(
+    section: NewEpisodeSectionState,
+    onRetry: () -> Unit,
+    onAnimeClick: (Int) -> Unit,
+    onSeeAllClick: () -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.ScreenPadding),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Tập mới phát hành",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f),
+            )
+            if (section.releases.size > SECTION_PREVIEW_LIMIT) {
+                Text(
+                    text = "Xem tất cả",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable(onClick = onSeeAllClick)
+                        .padding(Dimens.SpaceXs),
+                )
+            }
+        }
+        when {
+            section.releases.isNotEmpty() -> LazyRow(
+                contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
+            ) {
+                items(section.releases.take(SECTION_PREVIEW_LIMIT), key = { it.malId }) { release ->
+                    NewEpisodeCard(
+                        release = release,
+                        onClick = { onAnimeClick(release.malId) },
+                        modifier = Modifier.width(Dimens.CardWidth),
+                    )
+                }
+            }
+
+            section.isLoading -> {
                 val shimmerProgress = rememberShimmerProgress()
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),

@@ -28,10 +28,13 @@ class HomeViewModel @Inject constructor(
     private var seasonNowJob: Job? = null
     private var topAnimeJob: Job? = null
     private var upcomingJob: Job? = null
+    private var newEpisodesJob: Job? = null
 
     // Guard double-tap theo TỪNG anime — hero giờ là slider nhiều trang, dùng
     // 1 job chung sẽ drop nhầm tap hợp lệ trên trang khác khi user vuốt nhanh.
     private val heroFavoriteJobs = mutableMapOf<Int, Job>()
+
+    private var randomAnimeJob: Job? = null
 
     init {
         // Room là nguồn hiển thị duy nhất — collect Flow suốt vòng đời màn
@@ -42,6 +45,7 @@ class HomeViewModel @Inject constructor(
             refreshSeasonNow()
             refreshTopAnime()
             refreshUpcoming()
+            refreshNewEpisodes()
         }
     }
 
@@ -80,7 +84,8 @@ class HomeViewModel @Inject constructor(
                 val previousSeasonNow = seasonNowJob
                 val previousTopAnime = topAnimeJob
                 val previousUpcoming = upcomingJob
-                // Gán cùng 1 job cho cả 3 biến — nếu user bấm "Thử lại" riêng 1
+                val previousNewEpisodes = newEpisodesJob
+                // Gán cùng 1 job cho cả 4 biến — nếu user bấm "Thử lại" riêng 1
                 // section trong lúc pull-to-refresh đang chạy, cancelAndJoin sẽ
                 // nhắm đúng job đang chạy thật thay vì job cũ đã xong.
                 val refreshJob = viewModelScope.launch {
@@ -88,14 +93,17 @@ class HomeViewModel @Inject constructor(
                     previousSeasonNow?.cancelAndJoin()
                     previousTopAnime?.cancelAndJoin()
                     previousUpcoming?.cancelAndJoin()
+                    previousNewEpisodes?.cancelAndJoin()
                     refreshSeasonNow(force = true)
                     refreshTopAnime(force = true)
                     refreshUpcoming(force = true)
+                    refreshNewEpisodes(force = true)
                     setState { copy(isRefreshing = false) }
                 }
                 seasonNowJob = refreshJob
                 topAnimeJob = refreshJob
                 upcomingJob = refreshJob
+                newEpisodesJob = refreshJob
             }
 
             is HomeEvent.OnHeroFavoriteClick -> {
@@ -112,6 +120,37 @@ class HomeViewModel @Inject constructor(
 
             HomeEvent.OnSeeAllTopAnimeClick -> sendEffect(HomeEffect.NavigateToTopAnime)
             HomeEvent.OnSeeAllUpcomingClick -> sendEffect(HomeEffect.NavigateToUpcoming)
+
+            HomeEvent.OnRandomAnimeClick -> {
+                // Chặn double-tap trong lúc đang chờ /random/anime trả về —
+                // không dùng job.isActive suông vì cần cả cờ isLoadingRandom
+                // để UI đổi icon dice thành spinner.
+                if (randomAnimeJob?.isActive == true) return
+                randomAnimeJob = viewModelScope.launch {
+                    setState { copy(isLoadingRandom = true, randomAnimeError = null) }
+                    // loadMutex: cùng quy tắc "không gọi song song nhiều
+                    // endpoint Jikan" với season/top/upcoming ở trên.
+                    when (val result = loadMutex.withLock { repository.getRandomAnimeId() }) {
+                        is ApiResult.Success -> sendEffect(HomeEffect.NavigateToDetail(result.data))
+                        // Request Jikan thật (khác Room write local của
+                        // OnHeroFavoriteClick) — phải báo message rõ cho user
+                        // như mọi lỗi request khác trong file này, không im
+                        // lặng chỉ log.
+                        is ApiResult.Error -> setState { copy(randomAnimeError = result.error.toUserMessage()) }
+                    }
+                    setState { copy(isLoadingRandom = false) }
+                }
+            }
+
+            HomeEvent.OnRetryNewEpisodes -> {
+                val previous = newEpisodesJob
+                newEpisodesJob = viewModelScope.launch {
+                    previous?.cancelAndJoin()
+                    refreshNewEpisodes(force = true)
+                }
+            }
+
+            HomeEvent.OnSeeAllNewEpisodesClick -> sendEffect(HomeEffect.NavigateToNewEpisodes)
         }
     }
 
@@ -129,6 +168,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             repository.observeUpcoming().collect { list ->
                 setState { copy(upcoming = upcoming.copy(animeList = list)) }
+            }
+        }
+        viewModelScope.launch {
+            repository.observeNewEpisodeReleases().collect { list ->
+                setState { copy(newEpisodes = newEpisodes.copy(releases = list)) }
             }
         }
     }
@@ -175,6 +219,18 @@ class HomeViewModel @Inject constructor(
                 is ApiResult.Success -> setState { copy(upcoming = upcoming.copy(isLoading = false)) }
                 is ApiResult.Error -> setState {
                     copy(upcoming = upcoming.copy(isLoading = false, error = result.error.toUserMessage()))
+                }
+            }
+        }
+    }
+
+    private suspend fun refreshNewEpisodes(force: Boolean = false) {
+        setState { copy(newEpisodes = newEpisodes.copy(isLoading = true, error = null)) }
+        loadMutex.withLock {
+            when (val result = repository.refreshNewEpisodeReleases(force)) {
+                is ApiResult.Success -> setState { copy(newEpisodes = newEpisodes.copy(isLoading = false)) }
+                is ApiResult.Error -> setState {
+                    copy(newEpisodes = newEpisodes.copy(isLoading = false, error = result.error.toUserMessage()))
                 }
             }
         }

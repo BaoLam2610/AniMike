@@ -80,8 +80,8 @@ Khai báo trong `gradle/libs.versions.toml` rồi thêm vào `app/build.gradle.k
   trả (1 request `/videos/episodes` mỗi lần vào màn). `getEpisodes()` vẫn
   one-shot như trước, không đổi. (Lưu ý: session này ban đầu từng thử cache
   Episodes + TTL theo `isAiring` — đã revert hoàn toàn vì hiểu sai yêu cầu.)
-- [x] **Recommendations/Pictures/Reviews(preview): cache Room + SWR** ✅ —
-  ngược lại với Episodes, 3 mục này KHÔNG cần tươi theo từng phút/giờ nên
+- [x] **Recommendations/Pictures/Reviews(preview)/Characters: cache Room + SWR** ✅ —
+  ngược lại với Episodes, 4 mục này KHÔNG cần tươi theo từng phút/giờ nên
   đáng cache để tránh gọi lại API mỗi lần user vào/ra Detail:
   - **Recommendations**: tái dùng bảng `cached_anime_list`/`AnimeListDao` sẵn
     có (key `detail_recommendations_{malId}`, xem `AnimeListKey`) thay vì
@@ -92,26 +92,33 @@ Khai báo trong `gradle/libs.versions.toml` rồi thêm vào `app/build.gradle.k
   - **Reviews (preview)**: bảng mới `cached_review_preview` (`malId`,
     `reviewId`, `username`, `score`, `reviewText`, `position`, `fetchedAt`),
     vẫn cắt còn `REVIEWS_LIMIT` (5) trước khi cache. TTL 24h
-    (`CacheTtl.REVIEWS_PREVIEW_MS`, ngắn hơn 2 mục trên) vì user MAL đăng
+    (`CacheTtl.REVIEWS_PREVIEW_MS`, ngắn hơn các mục còn lại) vì user MAL đăng
     review liên tục. KHÔNG ảnh hưởng `reviewsPagingSource` (Paging 3 riêng
     cho ReviewsScreen "Xem tất cả").
-  - Cả 3 dùng sentinel row (id âm/url rỗng) khi API trả rỗng thật, để
+  - **Characters**: bảng mới `cached_character` (`malId`, `characterId`,
+    `name`, `imageUrl`, `role`, `voiceActorName`, `position`, `fetchedAt`) —
+    thay cho cache tạm trong bộ nhớ (5 phút) ban đầu. TTL 7 ngày
+    (`CacheTtl.CHARACTERS_MS`, giống Recommendations/Pictures) vì dàn nhân
+    vật gần như tĩnh. Detail preview và `CharactersScreen` ("Xem tất cả") giờ
+    cùng đọc 1 bảng qua `observeCharacters()`/`refreshCharacters()`, thay cho
+    `getCharacters()` one-shot cũ.
+  - Cả 4 dùng sentinel row (id âm/url rỗng) khi API trả rỗng thật, để
     `getFetchedAt` (MIN aggregate) không trả `null` mãi mãi và gây cache-miss
     vĩnh viễn — lọc bỏ sentinel khi đọc ra domain model.
-  - Characters giữ nguyên cache tạm trong bộ nhớ (5 phút) như cũ, không đổi.
   - Pull-to-refresh ở Detail (`DetailEvent.OnPullToRefresh`) force-refresh cả
-    `/full` lẫn 3 cache này (bỏ qua TTL); Episodes không cần "force" vì vốn
-    đã luôn gọi lại. DB version 4→5 (thêm `cached_picture`/`cached_review_preview`,
-    bỏ bảng episode cache không dùng nữa — destructive migration, chấp nhận
-    được vì chưa có user thật).
+    `/full` lẫn 4 cache này (bỏ qua TTL); Episodes không cần "force" vì vốn
+    đã luôn gọi lại. DB version 4→5 (thêm `cached_picture`/`cached_review_preview`),
+    6→7 (thêm `cached_character`, bỏ cache tạm trong bộ nhớ của Characters) —
+    destructive migration, chấp nhận được vì chưa có user thật.
 
 - [ ] **[Chưa làm] Dọn cache phình theo thời gian** — `cached_anime_list`
   (bucket `detail_recommendations_{malId}`), `cached_picture`,
-  `cached_review_preview` mỗi bảng tích lũy VĨNH VIỄN 1 bucket riêng cho MỖI
-  anime user từng mở Detail (khác 3 key cố định của Home luôn ghi đè tại
-  chỗ) — không có cơ chế dọn dẹp. Không chặn vì kích thước mỗi bucket rất nhỏ
-  (vài chục row), nhưng nên có ý tưởng dọn khi làm tiếp: ví dụ purge bucket
-  cũ hơn N×TTL lúc app khởi động, hoặc giới hạn tổng số bucket kiểu LRU.
+  `cached_review_preview`, `cached_character` mỗi bảng tích lũy VĨNH VIỄN 1
+  bucket riêng cho MỖI anime user từng mở Detail (khác 3 key cố định của Home
+  luôn ghi đè tại chỗ) — không có cơ chế dọn dẹp. Không chặn vì kích thước
+  mỗi bucket rất nhỏ (vài chục row), nhưng nên có ý tưởng dọn khi làm tiếp: ví
+  dụ purge bucket cũ hơn N×TTL lúc app khởi động, hoặc giới hạn tổng số
+  bucket kiểu LRU.
 
 ## 4. Roadmap theo phase
 
@@ -219,15 +226,48 @@ Triển khai lần lượt từng đợt, mỗi đợt: code → build → compo
   `DetailEffect.OpenYoutube` xử lý trong `LaunchedEffect` của DetailScreen
   (như 4 effect điều hướng khác) — bản revert đầu tiên lỡ gọi `startActivity`
   thẳng trong composable, bị compose-reviewer bắt lỗi và sửa lại.
-- [ ] Polish motion/transition giữa các màn hình (sau cùng, khi các màn đã ổn định)
+- [x] **Polish motion/transition giữa các màn hình** ✅ — định nghĩa transition
+  DÙNG CHUNG ở cấp `NavHost` (`enterTransition`/`exitTransition`/
+  `popEnterTransition`/`popExitTransition`), không gán cứng theo từng
+  `composable()`: xét CẶP route thực tế (`initialState`/`targetState`) để
+  quyết định — đổi tab bottom-nav (cả 2 đầu đều là 1 trong 4 route gốc) →
+  crossfade 200ms; mọi điều hướng còn lại (push/pop) → slide + fade 300ms.
+  Cách này xử lý đúng route "lưỡng tính" như SEARCH (vừa là tab gốc vừa là
+  điểm push sang SearchFilter) mà không cần override riêng từng composable.
 
 Tính năng mở rộng Detail (từng nằm ở MVP 3 cũ, chuyển sang MVP 4 vì thuộc nhóm dữ liệu mới):
 nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`)
 
 ### MVP 4 — Khám phá
-- [ ] Random anime "Hôm nay xem gì?" (`/random/anime`)
-- [ ] Tập mới phát hành + promo mới (`/watch/episodes`, `/watch/promos`) — khớp section
-  "New Episode Releases" trên Home của kit Animax
+- [x] **Random anime "Hôm nay xem gì?"** ✅ — card ngang trong Home (giữa hero
+  và "Top Hits Anime", không có mockup nên tự thiết kế theo token
+  animike-design): icon dice, bấm vào gọi `/random/anime` rồi điều hướng
+  thẳng sang Detail của anime trả về. Không cache theo TTL (mỗi lần bấm phải
+  thực sự ngẫu nhiên), nhưng CÓ ghi thẳng kết quả vào cache Detail
+  (`AnimeDetailDao.upsert`) trước khi điều hướng — tránh Detail cache-miss
+  gọi lại y hệt `/anime/{id}/full` lần nữa (phát hiện qua review, sửa ngay).
+  Chặn double-tap bằng `isLoadingRandom` + đổi icon dice thành spinner trong
+  lúc chờ; lỗi request thật hiện inline (tái dùng `SectionError` có sẵn) thay
+  vì chỉ log im lặng như bản đầu (cũng phát hiện qua review, sửa ngay).
+- [x] **Tập mới phát hành** ✅ — section "Tập mới phát hành" trên Home (khớp
+  kit "New Episode Releases"), SWR + Room cache riêng (`cached_new_episode`,
+  TTL 24h giống 3 list Home khác), preview 10 + "Xem tất cả" mở
+  `NewEpisodesScreen` (grid 2 cột, KHÔNG Paging vì endpoint không hỗ trợ phân
+  trang thật — đã verify qua curl: `page=1`/`page=2` trả về y hệt nhau, luôn 1
+  snapshot cố định). Dùng `/watch/episodes/popular` thay vì `/watch/episodes`
+  (bản thường) — verify qua curl cùng model response (entry/episodes/
+  region_locked, KHÔNG cần đổi DTO/mapper) nhưng trả các bộ nổi tiếng hơn
+  (Cowboy Bebop, Naruto...) thay vì phim bất kỳ; đã cân nhắc `/watch/promos/
+  popular` nhưng response shape khác hẳn (có `trailer` object + `title` promo
+  riêng, không có mảng `episodes`) nên không phù hợp để thay thế section này.
+  Bỏ score badge của kit — endpoint này không có field score (không phải
+  thiếu ngẫu nhiên, cấu trúc response cố định không trả). **Bỏ qua
+  `/watch/promos`** (trailer/PV mới) — không có mockup riêng, và nội dung
+  (danh sách trailer) trùng lặp về ý nghĩa với trailer card đã có sẵn trong
+  Detail; để dành nếu sau này cần 1 tab "khám phá trailer" riêng.
+  `NewEpisodeCard` gán `contentDescription` = tên anime + nhãn tập trên ảnh
+  (không chỉ hiện "Episode N" — nhiều bìa không có logo/tên đọc được như ảnh
+  mẫu trong kit) — phát hiện qua review, sửa ngay.
 - [ ] Đề xuất cộng đồng (`/recommendations/anime`)
 - [ ] Biểu đồ phân bố điểm + số người xem (`/anime/{id}/statistics`), nhạc OP/ED (`/anime/{id}/themes`)
 - [ ] Nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`) — chuyển từ MVP 3 cũ

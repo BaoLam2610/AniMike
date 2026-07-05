@@ -4,13 +4,16 @@ import androidx.paging.PagingSource
 import com.lambao.animike.data.local.CacheTtl
 import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
+import com.lambao.animike.data.local.dao.CharacterDao
 import com.lambao.animike.data.local.dao.PictureDao
 import com.lambao.animike.data.local.dao.ReviewPreviewDao
 import com.lambao.animike.data.local.entity.AnimeListKey
+import com.lambao.animike.data.local.entity.CachedCharacterEntity
 import com.lambao.animike.data.local.entity.CachedPictureEntity
 import com.lambao.animike.data.local.entity.CachedReviewPreviewEntity
 import com.lambao.animike.data.local.isExpired
 import com.lambao.animike.data.remote.JikanApi
+import com.lambao.animike.domain.mapper.toCharacterEntity
 import com.lambao.animike.domain.mapper.toDomain
 import com.lambao.animike.domain.mapper.toEntity
 import com.lambao.animike.domain.mapper.toListEntity
@@ -23,18 +26,17 @@ import com.lambao.animike.domain.model.AnimeReview
 import com.lambao.animike.domain.model.Episode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 interface AnimeDetailRepository {
     fun observeAnimeDetail(malId: Int): Flow<AnimeDetail?>
     suspend fun refreshAnimeDetail(malId: Int, force: Boolean = false): ApiResult<Unit>
 
-    // Characters có cache tạm trong bộ nhớ (xem charactersCache ở Impl) vì
-    // /characters không phân trang — Detail preview và CharactersScreen ("Xem
-    // tất cả") gọi Y HỆT 1 request, cache dedup tránh gọi 2 lần liên tiếp khi
-    // user bấm "Xem tất cả" ngay sau đó.
-    suspend fun getCharacters(malId: Int): ApiResult<List<AnimeCharacter>>
+    // SWR giống Recommendations/Pictures (Room cache riêng, TTL dài) — Detail
+    // preview và CharactersScreen ("Xem tất cả") cùng đọc 1 bảng nên không gọi
+    // trùng /characters khi user bấm "Xem tất cả" ngay sau khi Detail vừa tải.
+    fun observeCharacters(malId: Int): Flow<List<AnimeCharacter>>
+    suspend fun refreshCharacters(malId: Int, force: Boolean = false): ApiResult<Unit>
 
     // SWR (docs/ROADMAP.md mục 3b) — tái dùng bảng cached_anime_list/AnimeListDao
     // (xem AnimeListKey.detailRecommendations) thay vì thêm entity/DAO riêng,
@@ -77,14 +79,8 @@ class AnimeDetailRepositoryImpl @Inject constructor(
     private val animeListDao: AnimeListDao,
     private val pictureDao: PictureDao,
     private val reviewPreviewDao: ReviewPreviewDao,
+    private val characterDao: CharacterDao,
 ) : AnimeDetailRepository {
-
-    // Cache tạm trong tiến trình (KHÔNG phải Room, mất khi app bị kill) — chỉ
-    // để khử trùng 2 lệnh gọi getCharacters() giống hệt nhau khi Detail vừa
-    // fetch xong rồi user bấm "Xem tất cả" ngay sau đó. @Singleton nên field
-    // này sống suốt vòng đời app; ConcurrentHashMap vì có thể đọc/ghi từ
-    // nhiều ViewModel (Detail + Characters) gần như đồng thời.
-    private val charactersCache = ConcurrentHashMap<Int, Pair<Long, List<AnimeCharacter>>>()
 
     override fun observeAnimeDetail(malId: Int): Flow<AnimeDetail?> =
         dao.observe(malId).map { it?.toDomain() }
@@ -102,16 +98,45 @@ class AnimeDetailRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getCharacters(malId: Int): ApiResult<List<AnimeCharacter>> {
-        charactersCache[malId]?.let { (fetchedAt, cached) ->
-            if (!isExpired(fetchedAt, CacheTtl.MEMORY_DEDUP_MS)) return ApiResult.Success(cached)
+    override fun observeCharacters(malId: Int): Flow<List<AnimeCharacter>> =
+        // characterId < 0: lọc bỏ sentinel row (xem refreshCharacters).
+        characterDao.observe(malId).map { entities ->
+            entities.filter { it.characterId >= 0 }.map { it.toDomain() }
+        }
+
+    override suspend fun refreshCharacters(malId: Int, force: Boolean): ApiResult<Unit> {
+        if (!force) {
+            val fetchedAt = characterDao.getFetchedAt(malId)
+            if (fetchedAt != null && !isExpired(fetchedAt, CacheTtl.CHARACTERS_MS)) {
+                return ApiResult.Success(Unit)
+            }
         }
         return safeApiCall {
-            api.getCharacters(malId).data.mapNotNull { it.toDomain() }
-        }.also { result ->
-            if (result is ApiResult.Success) {
-                charactersCache[malId] = System.currentTimeMillis() to result.data
+            // distinctBy: phòng Jikan trả trùng malId nhân vật trong cùng
+            // response (cùng lý do với Recommendations/Pictures) — primary
+            // key composite (malId, characterId) sẽ REPLACE âm thầm và lệch
+            // position nếu không khử trùng trước.
+            val characters = api.getCharacters(malId).data.mapNotNull { it.toDomain() }.distinctBy { it.malId }
+            val fetchedAt = System.currentTimeMillis()
+            val entities = if (characters.isEmpty()) {
+                // Sentinel row (characterId=-1, MAL character id thật luôn
+                // dương) — cùng lý do với Recommendations/Reviews/Pictures.
+                listOf(
+                    CachedCharacterEntity(
+                        malId = malId,
+                        characterId = -1,
+                        name = "",
+                        imageUrl = null,
+                        role = "",
+                        voiceActorName = null,
+                        position = 0,
+                        fetchedAt = fetchedAt,
+                    ),
+                )
+            } else {
+                characters.mapIndexed { index, character -> character.toCharacterEntity(malId, index, fetchedAt) }
             }
+            characterDao.replace(malId, entities)
         }
     }
 

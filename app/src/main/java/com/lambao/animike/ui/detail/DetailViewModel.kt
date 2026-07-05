@@ -37,6 +37,7 @@ class DetailViewModel @Inject constructor(
         // đời màn hình; loadAll() chỉ quyết định KHI NÀO gọi API. Riêng
         // Episodes KHÔNG có Flow riêng — one-shot, set thẳng trong loadAll().
         observeCachedDetail()
+        observeCharacters()
         observeRecommendations()
         observeReviewPreview()
         observePictures()
@@ -108,6 +109,14 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    private fun observeCharacters() {
+        viewModelScope.launch {
+            repository.observeCharacters(malId).collect { characters ->
+                setState { copy(characters = characters) }
+            }
+        }
+    }
+
     private fun observeRecommendations() {
         viewModelScope.launch {
             repository.observeRecommendations(malId).collect { recommendations ->
@@ -161,23 +170,18 @@ class DetailViewModel @Inject constructor(
             }
         }
 
-        // Nhân vật/tập không critical — lỗi thì section tương ứng để trống.
-        val charactersResult = loadMutex.withLock { repository.getCharacters(malId) }
-        if (charactersResult is ApiResult.Success) {
-            setState { copy(characters = charactersResult.data) }
-        }
-
         // Episodes KHÔNG cache — luôn gọi lại, set thẳng ở đây (không qua Flow
-        // như 3 mục dưới vì không có Room đứng giữa).
+        // như các mục dưới vì không có Room đứng giữa).
         val episodesResult = loadMutex.withLock { repository.getEpisodes(malId) }
         if (episodesResult is ApiResult.Success) {
             setState { copy(episodes = episodesResult.data) }
         }
 
-        // Recommendations/reviews/pictures: không setState thủ công — 3 hàm
-        // observeXxx() (Flow từ Room) trong init đã tự cập nhật state reactively
-        // khi refresh xong. refreshXxx tự quyết định gọi API hay không dựa TTL
-        // (force=true khi pull-to-refresh sẽ bỏ qua TTL).
+        // Characters/recommendations/reviews/pictures: không setState thủ công
+        // — observeXxx() (Flow từ Room) trong init đã tự cập nhật state
+        // reactively khi refresh xong. refreshXxx tự quyết định gọi API hay
+        // không dựa TTL (force=true khi pull-to-refresh sẽ bỏ qua TTL).
+        loadMutex.withLock { repository.refreshCharacters(malId, force) }
         loadMutex.withLock { repository.refreshRecommendations(malId, force) }
         loadMutex.withLock { repository.refreshReviewPreview(malId, force) }
         loadMutex.withLock { repository.refreshPictures(malId, force) }

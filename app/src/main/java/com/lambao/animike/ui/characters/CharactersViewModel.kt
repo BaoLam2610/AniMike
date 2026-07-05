@@ -23,6 +23,10 @@ class CharactersViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
+        // Room là nguồn hiển thị duy nhất — cùng bảng cached_character mà
+        // Detail đã refresh, nên nếu user vào đây ngay sau khi Detail tải
+        // xong thì đã có sẵn dữ liệu, không cần gọi lại /characters.
+        observeCharacters()
         loadJob = viewModelScope.launch { load() }
     }
 
@@ -34,17 +38,32 @@ class CharactersViewModel @Inject constructor(
                 val previous = loadJob
                 loadJob = viewModelScope.launch {
                     previous?.cancelAndJoin()
-                    load()
+                    load(force = true)
                 }
             }
         }
     }
 
-    private suspend fun load() {
+    private fun observeCharacters() {
+        viewModelScope.launch {
+            repository.observeCharacters(malId).collect { characters ->
+                setState { copy(allCharacters = characters) }
+            }
+        }
+    }
+
+    private suspend fun load(force: Boolean = false) {
         setState { copy(isLoading = true, error = null) }
-        when (val result = repository.getCharacters(malId)) {
-            is ApiResult.Success -> setState { copy(isLoading = false, allCharacters = result.data) }
-            is ApiResult.Error -> setState { copy(isLoading = false, error = result.error.toUserMessage()) }
+        when (val result = repository.refreshCharacters(malId, force)) {
+            is ApiResult.Success -> setState { copy(isLoading = false) }
+            is ApiResult.Error -> {
+                // Đã có cache thì giữ nguyên hiển thị (stale-while-revalidate),
+                // chỉ báo lỗi khi chưa từng có dữ liệu để hiện.
+                val hasCached = currentState().allCharacters.isNotEmpty()
+                setState {
+                    copy(isLoading = false, error = if (hasCached) null else result.error.toUserMessage())
+                }
+            }
         }
     }
 }

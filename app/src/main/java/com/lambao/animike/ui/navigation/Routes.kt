@@ -23,6 +23,8 @@ object Routes {
     // "Xem tất cả" từ Home (Top Hits / Sắp chiếu) — source là AnimeListSource.name
     const val ANIME_LIST = "animeList/{source}"
     const val ANIME_LIST_ARG_SOURCE = "source"
+    // "Xem tất cả" của "Tập mới phát hành" (MVP4) — không có arg, 1 feed toàn cục.
+    const val NEW_EPISODES = "newEpisodes"
 
     fun detail(malId: Int) = "detail/$malId"
     fun episodes(malId: Int) = "episodes/$malId"

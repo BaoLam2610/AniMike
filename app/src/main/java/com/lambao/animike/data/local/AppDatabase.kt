@@ -4,14 +4,18 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
+import com.lambao.animike.data.local.dao.CharacterDao
 import com.lambao.animike.data.local.dao.FavoriteDao
 import com.lambao.animike.data.local.dao.GenreDao
+import com.lambao.animike.data.local.dao.NewEpisodeDao
 import com.lambao.animike.data.local.dao.PictureDao
 import com.lambao.animike.data.local.dao.ReviewPreviewDao
 import com.lambao.animike.data.local.dao.SeasonYearDao
 import com.lambao.animike.data.local.entity.CachedAnimeDetailEntity
 import com.lambao.animike.data.local.entity.CachedAnimeListEntity
+import com.lambao.animike.data.local.entity.CachedCharacterEntity
 import com.lambao.animike.data.local.entity.CachedGenreEntity
+import com.lambao.animike.data.local.entity.CachedNewEpisodeEntity
 import com.lambao.animike.data.local.entity.CachedPictureEntity
 import com.lambao.animike.data.local.entity.CachedReviewPreviewEntity
 import com.lambao.animike.data.local.entity.CachedSeasonYearEntity
@@ -26,8 +30,10 @@ import com.lambao.animike.data.local.entity.FavoriteEntity
         CachedSeasonYearEntity::class,
         CachedPictureEntity::class,
         CachedReviewPreviewEntity::class,
+        CachedNewEpisodeEntity::class,
+        CachedCharacterEntity::class,
     ],
-    version = 5,
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -38,4 +44,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun seasonYearDao(): SeasonYearDao
     abstract fun pictureDao(): PictureDao
     abstract fun reviewPreviewDao(): ReviewPreviewDao
+    abstract fun newEpisodeDao(): NewEpisodeDao
+    abstract fun characterDao(): CharacterDao
 }

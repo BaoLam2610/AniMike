@@ -97,8 +97,7 @@ Cache tự quản trong Room là tầng duy nhất. Server Jikan tự cache ~24h
 | `genres/anime` | 7 ngày (gần như tĩnh) |
 | seasons/now, top, upcoming | 24h |
 | detail full (`/anime/{id}/full`) | 24h |
-| Characters (Detail) | 5 phút, cache tạm trong bộ nhớ (không Room) — chỉ dedup 2 lệnh gọi liên tiếp Detail↔"Xem tất cả", không nhằm cache lâu dài |
-| Recommendations, Pictures (Detail) | 7 ngày (gần như tĩnh) |
+| Characters, Recommendations, Pictures (Detail) | 7 ngày, Room SWR (gần như tĩnh) |
 | Reviews preview (Detail, page 1) | 24h (user đăng liên tục) |
 | Episodes preview (Detail, "Các tập") | KHÔNG cache — luôn gọi lại vì tập mới có thể ra bất cứ lúc nào |
 | Search | KHÔNG cache (trừ Paging RemoteMediator sau này) |

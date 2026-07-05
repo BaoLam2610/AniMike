@@ -11,6 +11,7 @@ import com.lambao.animike.data.remote.dto.JikanResponse
 import com.lambao.animike.data.remote.dto.RecommendationEntryDto
 import com.lambao.animike.data.remote.dto.ReviewDto
 import com.lambao.animike.data.remote.dto.SeasonYearDto
+import com.lambao.animike.data.remote.dto.WatchEpisodeEntryDto
 import retrofit2.http.GET
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -38,6 +39,20 @@ interface JikanApi {
 
     @GET("anime/{id}/full")
     suspend fun getAnimeFull(@Path("id") id: Int): JikanResponse<AnimeFullDto>
+
+    // MVP4 "Hôm nay xem gì?" — trả về 1 anime full ngẫu nhiên, chỉ cần
+    // malId để điều hướng sang Detail (đã có sẵn cache/SWR riêng của Detail).
+    @GET("random/anime")
+    suspend fun getRandomAnime(): JikanResponse<AnimeFullDto>
+
+    // MVP4 "Tập mới phát hành" (kit Animax "New Episode Releases"). Dùng
+    // /watch/episodes/popular thay vì /watch/episodes (bản thường) — verify
+    // qua curl: cùng model response (entry/episodes/region_locked), nhưng trả
+    // các bộ nổi tiếng hơn (Cowboy Bebop, Naruto...) thay vì phim bất kỳ.
+    // Không truyền page: đã verify qua curl page=1 và page=2 trả về Y HỆT nhau
+    // (endpoint này không thực sự phân trang, luôn trả đúng 1 snapshot cố định).
+    @GET("watch/episodes/popular")
+    suspend fun getNewEpisodeReleases(): JikanListResponse<WatchEpisodeEntryDto>
 
     @GET("anime/{id}/characters")
     suspend fun getCharacters(@Path("id") id: Int): JikanListResponse<CharacterEntryDto>

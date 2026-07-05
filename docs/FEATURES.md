@@ -74,7 +74,7 @@
 
 ### 2.5. Khám phá
 - Random anime ("Hôm nay xem gì?"): `GET /random/anime`
-- Tập mới phát hành: `GET /watch/episodes`
+- Tập mới phát hành: `GET /watch/episodes/popular`
 - Trailer/promo mới: `GET /watch/promos`
 - Đề xuất từ cộng đồng: `GET /recommendations/anime`
 
