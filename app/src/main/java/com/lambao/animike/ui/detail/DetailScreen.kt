@@ -7,6 +7,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -27,9 +28,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -45,10 +48,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -74,13 +79,16 @@ import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.AnimeReview
+import com.lambao.animike.domain.model.AnimeThemes
 import com.lambao.animike.domain.model.Episode
 import com.lambao.animike.domain.model.RelationGroup
 import com.lambao.animike.ui.components.AnimeCard
 import com.lambao.animike.ui.components.BackButton
 import com.lambao.animike.ui.theme.Dimens
+import com.lambao.animike.ui.theme.Motion
 import com.lambao.animike.ui.theme.success
 import androidx.core.net.toUri
+import kotlinx.coroutines.launch
 
 @Composable
 fun DetailScreen(
@@ -117,6 +125,11 @@ fun DetailScreen(
     DetailScreenContent(state = state, onBackClick = onBackClick, onEvent = viewModel::onEvent)
 }
 
+// Ngưỡng hiện nút "cuộn lên đầu" — firstVisibleItemIndex tính theo SỐ ITEM
+// (kể cả Spacer riêng), không phải theo section ngữ nghĩa, nên chọn ngưỡng
+// hơi rộng để nút chỉ xuất hiện khi đã cuộn qua kha khá nội dung.
+private const val SCROLL_TO_TOP_THRESHOLD = 6
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DetailScreenContent(
@@ -124,6 +137,13 @@ private fun DetailScreenContent(
     onBackClick: () -> Unit,
     onEvent: (DetailEvent) -> Unit,
 ) {
+    // Hoist ở đây (không remember trong DetailContent) để nút "cuộn lên đầu"
+    // — sibling của LazyColumn trong Box này — điều khiển được đúng scroll
+    // state của nó (theo yêu cầu user: bỏ thu gọn/xem thêm cho Nhạc phim khi
+    // gộp vào tab, thay bằng nút nổi cuộn về đầu trang).
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+
     // contentWindowInsets = 0: AniMikeNavHost đã có Scaffold ngoài tiêu thụ
     // insets — tránh tiêu thụ 2 lần gây khoảng trắng dư quanh status bar.
     Scaffold(modifier = Modifier.fillMaxSize(), contentWindowInsets = WindowInsets(0)) { padding ->
@@ -151,6 +171,8 @@ private fun DetailScreenContent(
                         episodes = state.episodes,
                         reviews = state.reviews,
                         pictures = state.pictures,
+                        themes = state.themes,
+                        listState = listState,
                         onEvent = onEvent,
                     )
                 }
@@ -177,6 +199,24 @@ private fun DetailScreenContent(
                 onBackClick = onBackClick,
                 onFavoriteClick = { onEvent(DetailEvent.OnFavoriteClick) },
             )
+
+            val showScrollToTop by remember {
+                derivedStateOf { listState.firstVisibleItemIndex > SCROLL_TO_TOP_THRESHOLD }
+            }
+            AnimatedVisibility(
+                visible = showScrollToTop,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(Dimens.ScreenPadding),
+                // Cùng Motion token với AniMikeNavHost — Decelerate lúc vào,
+                // Accelerate lúc ra (quy tắc "Enter/exit rule" của skill).
+                enter = fadeIn(animationSpec = tween(Motion.DurationShort4, easing = Motion.EasingEmphasizedDecelerate)),
+                exit = fadeOut(animationSpec = tween(Motion.DurationShort4, easing = Motion.EasingEmphasizedAccelerate)),
+            ) {
+                ScrollToTopButton(
+                    onClick = { coroutineScope.launch { listState.animateScrollToItem(0) } },
+                )
+            }
         }
     }
 }
@@ -207,9 +247,11 @@ private fun DetailContent(
     episodes: List<Episode>,
     reviews: List<AnimeReview>,
     pictures: List<String>,
+    themes: AnimeThemes?,
+    listState: LazyListState,
     onEvent: (DetailEvent) -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
         item { HeroHeader(detail = detail) }
 
         if (detail.genres.isNotEmpty()) {
@@ -245,14 +287,19 @@ private fun DetailContent(
         item { RelationsSection(relations = detail.relations) }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
         // "Hình ảnh" đặt sau nhóm thông tin về chính bộ phim (tập/nhân vật/
-        // liên quan), trước nhóm khám phá (Đề xuất/Đánh giá) — tính năng phát
-        // sinh ngoài kit Animax, xem docs/ROADMAP.md MVP3.
+        // liên quan), trước nhóm khám phá (Đề xuất/Đánh giá/Nhạc phim) — tính
+        // năng phát sinh ngoài kit Animax, xem docs/ROADMAP.md MVP3.
         item { PicturesSection(pictures = pictures) }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
         item {
-            RecommendationsOrReviewsSection(
+            // "Nhạc phim" gộp vào tab cùng Đề xuất/Đánh giá (theo yêu cầu user
+            // — Detail vốn đã nhiều section, gộp lại đỡ dài trang). "Thống kê"
+            // ĐÃ CHUYỂN sang màn Đánh giá "Xem tất cả" (ReviewsScreen) — xem
+            // docs/ROADMAP.md.
+            ExploreTabsSection(
                 recommendations = recommendations,
                 reviews = reviews,
+                themes = themes,
                 onRecommendationClick = { onEvent(DetailEvent.OnRecommendationClick(it)) },
                 onSeeAllReviewsClick = { onEvent(DetailEvent.OnSeeAllReviewsClick) },
             )
@@ -373,6 +420,29 @@ private fun FavoriteButton(isFavorite: Boolean, onClick: () -> Unit, modifier: M
             text = if (isFavorite) "♥" else "♡",
             style = MaterialTheme.typography.titleMedium,
             color = if (isFavorite) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onBackground,
+        )
+    }
+}
+
+// Nút nổi "cuộn lên đầu" (thay cho thu gọn/xem thêm ở tab Nhạc phim — theo
+// yêu cầu user) — nền primary (khác BackButton/FavoriteButton dùng nền
+// surface bán trong suốt vì 2 nút đó luôn nổi trên Hero, còn nút này nổi
+// trên nội dung cuộn nên cần tương phản mạnh hơn để không lẫn vào nền).
+@Composable
+private fun ScrollToTopButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(Dimens.IconButtonSize)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "Cuộn lên đầu trang" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "↑",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onPrimary,
         )
     }
 }
@@ -690,6 +760,44 @@ private fun RelationsSection(relations: List<RelationGroup>) {
     }
 }
 
+// Gộp openings+endings thành 1 danh sách chung — MVP4 "Nhạc OP/ED" giờ là 1
+// tab trong ExploreTabsSection (cùng Đề xuất/Đánh giá) thay vì section riêng
+// đứng 1 mình, theo yêu cầu user (Detail vốn đã nhiều section). Không còn
+// thu gọn/xem thêm — thay bằng nút nổi "cuộn lên đầu" ở cấp DetailScreenContent
+// khi list dài (One Piece, Naruto... có thể 15-20+ OP/ED).
+private data class ThemeEntry(val label: String, val text: String)
+
+private fun buildThemeEntries(themes: AnimeThemes?): List<ThemeEntry> {
+    val current = themes ?: return emptyList()
+    return current.openings.map { ThemeEntry("Mở đầu", it) } + current.endings.map { ThemeEntry("Kết thúc", it) }
+}
+
+@Composable
+private fun ThemesList(entries: List<ThemeEntry>) {
+    Column(
+        modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+        verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
+    ) {
+        entries.forEach { entry -> ThemeRow(label = entry.label, text = entry.text) }
+    }
+}
+
+@Composable
+private fun ThemeRow(label: String, text: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceXs)) {
+        Text(
+            text = "♪ $label:",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 // Dùng chung cho Synopsis + từng dòng Relations — thu gọn N dòng + "Xem
 // thêm"/"Thu gọn", nhưng chỉ hiện nút toggle khi text THỰC SỰ tràn quá
 // maxCollapsedLines (onTextLayout + hasVisualOverflow), tránh hiện "Xem thêm"
@@ -846,54 +954,95 @@ private fun PictureViewerDialog(pictures: List<String>, initialPage: Int, onDism
 
 // Kit Animax: tab "More Like This" / "Comments" (underline indicator). Ở đây
 // đổi tên "Comments" thành "Đánh giá" vì Jikan chỉ có reviews MAL, không có
-// bình luận thời gian thực. Chỉ hiện tab khi CẢ 2 đều có dữ liệu — nếu chỉ 1
-// bên có, hiện thẳng section đó (không cần tab để chọn 1 lựa chọn duy nhất).
-private enum class DetailTab { RECOMMENDATIONS, REVIEWS }
+// bình luận thời gian thực. Thêm "Nhạc phim" làm tab thứ 3 (MVP4, theo yêu
+// cầu user — gộp vào đây thay vì đứng riêng để đỡ dài Detail). Chỉ hiện
+// TabRow khi ≥2 tab có dữ liệu — nếu chỉ 1 tab có, hiện thẳng section đó
+// (không cần tab để chọn 1 lựa chọn duy nhất); nếu cả 3 đều rỗng, ẩn hẳn.
+private enum class DetailTab { RECOMMENDATIONS, REVIEWS, THEMES }
+
+private fun detailTabLabel(tab: DetailTab): String = when (tab) {
+    DetailTab.RECOMMENDATIONS -> "Đề xuất"
+    DetailTab.REVIEWS -> "Đánh giá"
+    DetailTab.THEMES -> "Nhạc phim"
+}
 
 @Composable
-private fun RecommendationsOrReviewsSection(
+private fun ExploreTabsSection(
     recommendations: List<Anime>,
     reviews: List<AnimeReview>,
+    themes: AnimeThemes?,
     onRecommendationClick: (Int) -> Unit,
     onSeeAllReviewsClick: () -> Unit,
 ) {
-    // AnimatedVisibility thay vì early return khi cả 2 đều rỗng — cùng lý do
-    // với CharactersSection/EpisodesSection (recommendations/reviews fetch
-    // xong sau detail, "mọc" ra giữa chừng khi đang xem màn).
-    AnimatedVisibility(visible = recommendations.isNotEmpty() || reviews.isNotEmpty()) {
+    val themeEntries = remember(themes) { buildThemeEntries(themes) }
+    // buildList: chỉ liệt kê tab THỰC SỰ có data — khác bản 2 tab cũ (so sánh
+    // cứng 2 điều kiện), giờ tổng quát cho N tab để dễ mở rộng sau này.
+    val availableTabs = remember(recommendations, reviews, themeEntries) {
+        buildList {
+            if (recommendations.isNotEmpty()) add(DetailTab.RECOMMENDATIONS)
+            if (reviews.isNotEmpty()) add(DetailTab.REVIEWS)
+            if (themeEntries.isNotEmpty()) add(DetailTab.THEMES)
+        }
+    }
+    // AnimatedVisibility thay vì early return khi cả 3 đều rỗng — cùng lý do
+    // với CharactersSection/EpisodesSection (data fetch xong sau detail,
+    // "mọc" ra giữa chừng khi đang xem màn).
+    AnimatedVisibility(visible = availableTabs.isNotEmpty()) {
         when {
-            recommendations.isNotEmpty() && reviews.isNotEmpty() -> {
-                var selectedTab by rememberSaveable { mutableStateOf(DetailTab.RECOMMENDATIONS) }
+            availableTabs.size >= 2 -> {
+                var selectedTab by rememberSaveable { mutableStateOf(availableTabs.first()) }
+                // Phòng trường hợp hiếm: tab đang chọn rớt khỏi availableTabs
+                // giữa chừng (SWR refresh làm 1 nguồn data đang chọn về rỗng)
+                // — fallback về tab đầu tiên còn lại thay vì render tab không tồn tại.
+                val effectiveTab = if (selectedTab in availableTabs) selectedTab else availableTabs.first()
                 Column {
-                    DetailTabRow(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
-                    // Crossfade khi đổi tab thay vì "nhảy" cứng giữa 2 nội dung
+                    DetailTabRow(
+                        tabs = availableTabs,
+                        selectedTab = effectiveTab,
+                        onTabSelected = { selectedTab = it },
+                    )
+                    // Crossfade khi đổi tab thay vì "nhảy" cứng giữa nội dung
                     // khác hình dạng (LazyRow vs Column cao thấp khác nhau).
                     // SizeTransform(clip = false) — nếu không, nội dung cao hơn
                     // bị cắt trong lúc animate vì AnimatedContent mặc định clip
                     // theo size nội suy (compose-expert/animation.md mục tab-switch).
                     AnimatedContent(
-                        targetState = selectedTab,
-                        transitionSpec = { fadeIn() togetherWith fadeOut() using SizeTransform(clip = false) },
+                        targetState = effectiveTab,
+                        // Cùng Motion token với crossfade tab-switch của
+                        // AniMikeNavHost (DurationShort4 + Decelerate/Accelerate).
+                        transitionSpec = {
+                            val enterSpec = tween<Float>(Motion.DurationShort4, easing = Motion.EasingEmphasizedDecelerate)
+                            val exitSpec = tween<Float>(Motion.DurationShort4, easing = Motion.EasingEmphasizedAccelerate)
+                            fadeIn(animationSpec = enterSpec) togetherWith
+                                fadeOut(animationSpec = exitSpec) using SizeTransform(clip = false)
+                        },
                         label = "detail_tab_content",
                     ) { tab ->
                         when (tab) {
                             DetailTab.RECOMMENDATIONS -> RecommendationsRow(recommendations, onRecommendationClick)
                             DetailTab.REVIEWS -> ReviewsList(reviews, onSeeAllReviewsClick)
+                            DetailTab.THEMES -> ThemesList(themeEntries)
                         }
                     }
                 }
             }
 
-            recommendations.isNotEmpty() -> Column {
-                SectionTitle("Đề xuất tương tự")
-                RecommendationsRow(recommendations, onRecommendationClick)
+            availableTabs.size == 1 -> Column {
+                val onlyTab = availableTabs.first()
+                SectionTitle(
+                    when (onlyTab) {
+                        DetailTab.RECOMMENDATIONS -> "Đề xuất tương tự"
+                        DetailTab.REVIEWS -> "Đánh giá"
+                        DetailTab.THEMES -> "Nhạc phim"
+                    },
+                )
+                when (onlyTab) {
+                    DetailTab.RECOMMENDATIONS -> RecommendationsRow(recommendations, onRecommendationClick)
+                    DetailTab.REVIEWS -> ReviewsList(reviews, onSeeAllReviewsClick)
+                    DetailTab.THEMES -> ThemesList(themeEntries)
+                }
             }
-
-            reviews.isNotEmpty() -> Column {
-                SectionTitle("Đánh giá")
-                ReviewsList(reviews, onSeeAllReviewsClick)
-            }
-            // Cả 2 đều rỗng: AnimatedVisibility(visible=false) đã lo phần ẩn,
+            // Cả 3 đều rỗng: AnimatedVisibility(visible=false) đã lo phần ẩn,
             // nhánh này chỉ để tường minh chứ không có gì phải render.
             else -> Unit
         }
@@ -912,21 +1061,23 @@ private fun SectionTitle(text: String) {
 
 // Dùng TabRow/Tab chuẩn Material3 thay vì tự vẽ Row + gạch chân (bản tự vẽ
 // trước đó thiếu track nền + không animate, nhìn "thô") — TabRow tự lo phần
-// đo width chia đều và vẽ indicator trượt mượt giữa 2 tab.
+// đo width chia đều và vẽ indicator trượt mượt giữa các tab. `tabs` là danh
+// sách ĐỘNG (chỉ những tab thực sự có data) nên dùng index trong list này
+// làm selectedTabIndex, KHÔNG dùng DetailTab.ordinal (lệch khi thiếu tab).
 @Composable
-private fun DetailTabRow(selectedTab: DetailTab, onTabSelected: (DetailTab) -> Unit) {
+private fun DetailTabRow(tabs: List<DetailTab>, selectedTab: DetailTab, onTabSelected: (DetailTab) -> Unit) {
     TabRow(
-        selectedTabIndex = selectedTab.ordinal,
+        selectedTabIndex = tabs.indexOf(selectedTab).coerceAtLeast(0),
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.primary,
     ) {
-        DetailTab.entries.forEach { tab ->
+        tabs.forEach { tab ->
             Tab(
                 selected = tab == selectedTab,
                 onClick = { onTabSelected(tab) },
                 text = {
                     Text(
-                        text = if (tab == DetailTab.RECOMMENDATIONS) "Đề xuất" else "Đánh giá",
+                        text = detailTabLabel(tab),
                         style = MaterialTheme.typography.labelLarge,
                     )
                 },

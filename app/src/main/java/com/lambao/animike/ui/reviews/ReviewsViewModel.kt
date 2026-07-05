@@ -13,6 +13,7 @@ import com.lambao.animike.ui.navigation.Routes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 
 // Khớp page size thật của /reviews — đã verify qua curl: luôn trả 20 item/
 // trang bất kể có truyền limit hay không (Jikan bỏ qua query limit ở endpoint này).
@@ -21,8 +22,8 @@ private const val PAGE_SIZE = 20
 @HiltViewModel
 class ReviewsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    repository: AnimeDetailRepository,
-) : BaseViewModel<ReviewsState, ReviewsEvent, ReviewsEffect>(ReviewsState) {
+    private val repository: AnimeDetailRepository,
+) : BaseViewModel<ReviewsState, ReviewsEvent, ReviewsEffect>(ReviewsState()) {
 
     private val malId: Int = checkNotNull(savedStateHandle[Routes.REVIEWS_ARG_MAL_ID])
 
@@ -31,6 +32,25 @@ class ReviewsViewModel @Inject constructor(
         pagingSourceFactory = { repository.reviewsPagingSource(malId) },
     ).flow.cachedIn(viewModelScope)
 
-    // ReviewsEvent rỗng (xem ReviewsContract) — không có nhánh nào để xử lý.
-    override fun onEvent(event: ReviewsEvent) = Unit
+    init {
+        // Room là nguồn hiển thị duy nhất cho statistics — CHUYỂN quyền
+        // observe/refresh từ DetailViewModel sang đây (theo yêu cầu user, xem
+        // docs/ROADMAP.md). Cache Room (cached_anime_statistics) không đổi,
+        // chỉ đổi nơi tiêu thụ.
+        viewModelScope.launch {
+            repository.observeStatistics(malId).collect { statistics ->
+                setState { copy(statistics = statistics) }
+            }
+        }
+        viewModelScope.launch { repository.refreshStatistics(malId) }
+    }
+
+    override fun onEvent(event: ReviewsEvent) {
+        when (event) {
+            is ReviewsEvent.OnReviewClick -> {
+                setState { copy(selectedReview = event.review) }
+                sendEffect(ReviewsEffect.NavigateToReviewDetail)
+            }
+        }
+    }
 }

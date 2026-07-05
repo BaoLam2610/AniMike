@@ -41,6 +41,7 @@ class DetailViewModel @Inject constructor(
         observeRecommendations()
         observeReviewPreview()
         observePictures()
+        observeThemes()
         observeFavoriteStatus()
         loadJob = viewModelScope.launch { loadAll() }
     }
@@ -141,6 +142,14 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    private fun observeThemes() {
+        viewModelScope.launch {
+            repository.observeThemes(malId).collect { themes ->
+                setState { copy(themes = themes) }
+            }
+        }
+    }
+
     private fun observeFavoriteStatus() {
         viewModelScope.launch {
             favoriteRepository.observeIsFavorite(malId).collect { isFavorite ->
@@ -177,13 +186,16 @@ class DetailViewModel @Inject constructor(
             setState { copy(episodes = episodesResult.data) }
         }
 
-        // Characters/recommendations/reviews/pictures: không setState thủ công
-        // — observeXxx() (Flow từ Room) trong init đã tự cập nhật state
-        // reactively khi refresh xong. refreshXxx tự quyết định gọi API hay
-        // không dựa TTL (force=true khi pull-to-refresh sẽ bỏ qua TTL).
+        // Characters/recommendations/reviews/pictures/themes: không setState
+        // thủ công — observeXxx() (Flow từ Room) trong init đã tự cập nhật
+        // state reactively khi refresh xong. refreshXxx tự quyết định gọi API
+        // hay không dựa TTL (force=true khi pull-to-refresh sẽ bỏ qua TTL).
+        // "Thống kê" ĐÃ CHUYỂN sang ReviewsViewModel (màn Đánh giá "Xem tất
+        // cả") — không còn refresh ở đây, xem docs/ROADMAP.md.
         loadMutex.withLock { repository.refreshCharacters(malId, force) }
         loadMutex.withLock { repository.refreshRecommendations(malId, force) }
         loadMutex.withLock { repository.refreshReviewPreview(malId, force) }
         loadMutex.withLock { repository.refreshPictures(malId, force) }
+        loadMutex.withLock { repository.refreshThemes(malId, force) }
     }
 }

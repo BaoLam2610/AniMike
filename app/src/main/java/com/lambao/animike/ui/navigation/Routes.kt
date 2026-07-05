@@ -20,6 +20,9 @@ object Routes {
     const val CHARACTERS_ARG_MAL_ID = "malId"
     const val REVIEWS = "reviews/{malId}"
     const val REVIEWS_ARG_MAL_ID = "malId"
+    // Dùng chung ReviewsViewModel với REVIEWS (giống SEARCH_FILTER/SearchViewModel)
+    // — review đang xem lưu trong ReviewsState.selectedReview, không cần arg.
+    const val REVIEW_DETAIL = "reviews/detail"
     // "Xem tất cả" từ Home (Top Hits / Sắp chiếu) — source là AnimeListSource.name
     const val ANIME_LIST = "animeList/{source}"
     const val ANIME_LIST_ARG_SOURCE = "source"

@@ -286,7 +286,65 @@ nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`)
   nhau. Đã cân nhắc `/anime/{id}/recommendations` (đã dùng ở Detail) nhưng đó
   là recommendation THEO 1 anime cụ thể (1 entry, có context sẵn) — khác hẳn
   feed cộng đồng toàn cục này (2 entry ghép cặp, không theo malId nào).
-- [ ] Biểu đồ phân bố điểm + số người xem (`/anime/{id}/statistics`), nhạc OP/ED (`/anime/{id}/themes`)
+- [x] **Biểu đồ phân bố điểm + số người xem, nhạc OP/ED** ✅ — 2 tính năng mới
+  (không có mockup riêng, tự thiết kế theo token animike-design), NHƯNG sau
+  khi làm xong user review lại thấy Detail đã quá nhiều section nên đã đổi vị
+  trí đặt so với bản đầu:
+  - **Nhạc phim** (`/anime/{id}/themes`): vẫn ở Detail, nhưng gộp vào
+    `ExploreTabsSection` (cùng Đề xuất/Đánh giá) làm tab thứ 3 thay vì đứng
+    riêng — `DetailTab` giờ có 3 giá trị, TabRow chỉ hiện những tab THỰC SỰ
+    có data (không còn so cứng "2 tab" như bản gốc UI-4). Bỏ hẳn thu gọn/xem
+    thêm (không phù hợp khi đã nằm trong tab, nội dung tab vốn đã tách khỏi
+    luồng cuộn chính) — thay bằng 1 nút nổi "cuộn lên đầu trang" ở cấp
+    `DetailScreenContent` (hiện khi `listState.firstVisibleItemIndex` vượt
+    ngưỡng), giải quyết đúng lo ngại ban đầu (anime dài tập như One Piece có
+    thể 15-20+ OP/ED làm trang dài hẳn ra).
+  - **Thống kê** (`/anime/{id}/statistics`): CHUYỂN hẳn sang màn Đánh giá "Xem
+    tất cả" (`ReviewsScreen`) — hiện làm header phía trên danh sách Đánh giá
+    phân trang, tương tự pattern quen thuộc của Play Store/App Store (hiện
+    histogram điểm ngay trên đầu trang review đầy đủ). Lý do: điểm tổng
+    (`detail.score`) đã hiển thị sẵn ở badge Hero của Detail rồi, còn phần
+    phân bố chi tiết + số người xem hợp lý hơn khi đặt cạnh Đánh giá (cùng
+    nhóm "ý kiến cộng đồng"), đồng thời giảm bớt 1 section cho Detail.
+    `ReviewsViewModel` giờ có `ReviewsState` thật (trước là `data object`
+    rỗng) chứa `statistics: AnimeStatistics?`, tự observe/refresh Room khi
+    vào màn — độc lập với `items` (Paging 3), không liên quan loadState của
+    danh sách review.
+  - Cache Room: cả 2 vẫn 1 row/anime theo pattern `CachedAnimeDetailEntity`
+    (`@PrimaryKey malId`), 2 bảng `cached_anime_statistics`/`cached_anime_themes`,
+    TTL 7 ngày (`CacheTtl.STATISTICS_MS`/`THEMES_MS`), danh sách con (10 entry
+    điểm, openings/endings) encode delimiter ASCII giống
+    `CachedAnimeDetailMapper` — KHÔNG đổi so với bản đầu, chỉ đổi ViewModel
+    nào gọi observe/refresh (Statistics: `DetailViewModel` → `ReviewsViewModel`;
+    Themes: vẫn `DetailViewModel`). DB version 8→9.
+- [x] **Nâng cao màn Đánh giá** ✅ — `/anime/{id}/reviews` thật ra trả nhiều
+  field hơn `ReviewDto` ban đầu khai (chỉ mal_id/review/score/user.username);
+  verify qua curl phát hiện: `reactions` (8 loại: overall/nice/love_it/funny/
+  confusing/informative/well_written/creative), `date`, `tags` (LUÔN đúng 1
+  phần tử — **3 giá trị**, KHÁC giả định ban đầu của user chỉ có 2:
+  Recommended/**Mixed Feelings**/Not Recommended), `user.images` (avatar).
+  - `AnimeReview` mở rộng thêm `userAvatarUrl`/`date`/`tag: ReviewTag?`/
+    `reactions: ReviewReactions?` — đều nullable vì preview cache ở Detail
+    (`cached_review_preview`, top 5) KHÔNG lưu các field này (không mở rộng
+    schema chỉ để chứa dữ liệu Detail's ReviewCard không hiển thị) — chỉ
+    `ReviewsScreen` (Paging, live) mới có đủ. `date` format sẵn ở mapper
+    (`dd/MM/yyyy`, `Locale("vi","VN")`) qua `SimpleDateFormat` (KHÔNG dùng
+    `java.time` vì minSdk 24 chưa bật core library desugaring).
+  - **ReviewCard** (list) nâng cấp: avatar tròn + username + ngày đăng, badge
+    tag tự thiết kế (xanh success/tertiary/error theo 3 mức), dòng reactions
+    rút gọn (chỉ `overall`), vẫn giữ maxLines=6 cho review text. Bấm vào card
+    mở `ReviewDetailScreen` (route `reviews/detail`, KHÔNG bottom sheet — app
+    chưa có tiền lệ bottom sheet nào, mọi "xem thêm" đều dùng dedicated
+    screen, và review text có thể rất dài nên full-screen đọc tốt hơn) xem
+    đầy đủ: review KHÔNG bị cắt dòng, breakdown đủ cả 7 loại reactions.
+  - `ReviewDetailScreen` dùng chung `ReviewsViewModel` (scope theo backstack
+    entry của `Routes.REVIEWS`, giống `SearchFilterScreen`/`SearchViewModel`)
+    thay vì tự fetch lại — Paging 3 không có cách tra cứu "item theo id" nên
+    review được lưu thẳng vào `ReviewsState.selectedReview` lúc bấm card
+    (event `OnReviewClick`), không truyền qua nav argument.
+  - "Thống kê" đổi từ sibling cố định phía trên thành item ĐẦU trong chính
+    `LazyColumn` của danh sách review (theo yêu cầu user) — cuộn xuống thì
+    thống kê cuộn theo luôn thay vì chiếm chỗ cố định trên đầu màn hình.
 - [ ] Nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`) — chuyển từ MVP 3 cũ
 
 ### MVP 5 — Nhân vật / Người / Studio

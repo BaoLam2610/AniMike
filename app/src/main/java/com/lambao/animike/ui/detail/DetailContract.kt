@@ -5,6 +5,7 @@ import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.AnimeReview
+import com.lambao.animike.domain.model.AnimeThemes
 import com.lambao.animike.domain.model.Episode
 
 @Immutable
@@ -18,6 +19,11 @@ data class DetailState(
     val reviews: List<AnimeReview> = emptyList(),
     // URL ảnh từ /pictures (poster art các thời kỳ) — chỉ URL, không cần model riêng.
     val pictures: List<String> = emptyList(),
+    // MVP4 "Nhạc OP/ED" — null khi chưa tải xong hoặc anime không có OP/ED
+    // (khác 4 mục trên vì là single object/anime, không phải list nên không
+    // dùng emptyList() làm mặc định). "Thống kê" ĐÃ CHUYỂN sang màn Đánh giá
+    // "Xem tất cả" (ReviewsContract) — xem docs/ROADMAP.md, không còn ở đây.
+    val themes: AnimeThemes? = null,
     val isFavorite: Boolean = false,
     // Pull-to-refresh (docs/ROADMAP.md mục 3b) — force refresh detail +
     // recommendations/reviews/pictures bất kể TTL. Episodes không cần "force"

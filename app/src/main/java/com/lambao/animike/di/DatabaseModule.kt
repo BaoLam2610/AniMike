@@ -5,6 +5,8 @@ import androidx.room.Room
 import com.lambao.animike.data.local.AppDatabase
 import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
+import com.lambao.animike.data.local.dao.AnimeStatisticsDao
+import com.lambao.animike.data.local.dao.AnimeThemesDao
 import com.lambao.animike.data.local.dao.CharacterDao
 import com.lambao.animike.data.local.dao.CommunityRecommendationDao
 import com.lambao.animike.data.local.dao.FavoriteDao
@@ -66,4 +68,10 @@ object DatabaseModule {
     @Provides
     fun provideCommunityRecommendationDao(database: AppDatabase): CommunityRecommendationDao =
         database.communityRecommendationDao()
+
+    @Provides
+    fun provideAnimeStatisticsDao(database: AppDatabase): AnimeStatisticsDao = database.animeStatisticsDao()
+
+    @Provides
+    fun provideAnimeThemesDao(database: AppDatabase): AnimeThemesDao = database.animeThemesDao()
 }

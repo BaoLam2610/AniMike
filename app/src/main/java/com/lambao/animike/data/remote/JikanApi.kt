@@ -2,6 +2,8 @@ package com.lambao.animike.data.remote
 
 import com.lambao.animike.data.remote.dto.AnimeDto
 import com.lambao.animike.data.remote.dto.AnimeFullDto
+import com.lambao.animike.data.remote.dto.AnimeStatisticsDto
+import com.lambao.animike.data.remote.dto.AnimeThemesDto
 import com.lambao.animike.data.remote.dto.CharacterEntryDto
 import com.lambao.animike.data.remote.dto.EpisodeDto
 import com.lambao.animike.data.remote.dto.GenreDto
@@ -106,4 +108,14 @@ interface JikanApi {
     // khác nhau (khác /watch/episodes* vốn luôn 1 snapshot cố định).
     @GET("recommendations/anime")
     suspend fun getCommunityRecommendations(@Query("page") page: Int = 1): JikanListResponse<RecommendationPairDto>
+
+    // MVP4 "Biểu đồ phân bố điểm + số người xem" — 1 object/anime (không phân
+    // trang), verify qua curl: scores LUÔN đúng 10 phần tử (score 1-10).
+    @GET("anime/{id}/statistics")
+    suspend fun getAnimeStatistics(@Path("id") id: Int): JikanResponse<AnimeStatisticsDto>
+
+    // MVP4 "Nhạc OP/ED" — 1 object/anime, mỗi opening/ending là 1 chuỗi đã
+    // format sẵn từ Jikan (tên bài + nghệ sĩ + khoảng tập).
+    @GET("anime/{id}/themes")
+    suspend fun getAnimeThemes(@Path("id") id: Int): JikanResponse<AnimeThemesDto>
 }

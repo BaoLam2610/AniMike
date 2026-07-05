@@ -45,4 +45,14 @@ object Dimens {
     // "Đề xuất cộng đồng" (MVP4) — card rộng hơn AnimeCard vì chứa 2 poster
     // ghép cặp cạnh nhau + đoạn lý do bên dưới.
     val CommunityRecommendationCardWidth = 240.dp
+
+    // "Thống kê" ở Detail (MVP4) — thanh ngang phân bố điểm (score 1-10).
+    val ScoreBarHeight = 8.dp
+    val ScoreBarLabelWidth = 16.dp
+    val ScoreBarPercentWidth = 40.dp
+
+    // Avatar user trong ReviewCard (MVP4) — nhỏ hơn AvatarSize (dùng cho
+    // seiyuu/character ở Detail) vì đây chỉ là icon phụ cạnh username, không
+    // phải nội dung chính của item.
+    val ReviewAvatarSize = 36.dp
 }

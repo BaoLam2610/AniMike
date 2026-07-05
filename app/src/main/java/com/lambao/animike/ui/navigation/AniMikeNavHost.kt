@@ -36,7 +36,9 @@ import com.lambao.animike.ui.episodes.EpisodesScreen
 import com.lambao.animike.ui.favorites.FavoritesScreen
 import com.lambao.animike.ui.home.HomeScreen
 import com.lambao.animike.ui.newepisodes.NewEpisodesScreen
+import com.lambao.animike.ui.reviewdetail.ReviewDetailScreen
 import com.lambao.animike.ui.reviews.ReviewsScreen
+import com.lambao.animike.ui.reviews.ReviewsViewModel
 import com.lambao.animike.ui.search.SearchFilterScreen
 import com.lambao.animike.ui.search.SearchScreen
 import com.lambao.animike.ui.search.SearchViewModel
@@ -277,9 +279,25 @@ fun AniMikeNavHost() {
             composable(
                 route = Routes.REVIEWS,
                 arguments = listOf(navArgument(Routes.REVIEWS_ARG_MAL_ID) { type = NavType.IntType }),
-            ) {
+            ) { backStackEntry ->
                 // malId được ReviewsViewModel tự đọc qua SavedStateHandle, không cần truyền tay.
-                ReviewsScreen(onBackClick = navController::popBackStack)
+                // Truyền viewModel tường minh (thay vì default hiltViewModel()) để
+                // ReviewDetailScreen lấy lại ĐÚNG instance này qua getBackStackEntry.
+                ReviewsScreen(
+                    onBackClick = navController::popBackStack,
+                    onNavigateToReviewDetail = { navController.navigate(Routes.REVIEW_DETAIL) },
+                    viewModel = hiltViewModel(backStackEntry),
+                )
+            }
+            composable(Routes.REVIEW_DETAIL) {
+                // Dùng chung ReviewsViewModel với Routes.REVIEWS (scope theo backstack
+                // entry của route cha) — review đang xem đã lưu sẵn trong
+                // ReviewsState.selectedReview lúc bấm, không cần fetch lại/truyền arg.
+                val reviewsEntry = remember(it) { navController.getBackStackEntry(Routes.REVIEWS) }
+                ReviewDetailScreen(
+                    onBackClick = navController::popBackStack,
+                    viewModel = hiltViewModel<ReviewsViewModel>(reviewsEntry),
+                )
             }
         }
     }

@@ -22,6 +22,13 @@ object CacheTtl {
     // MAL đăng liên tục như Reviews nên TTL ngắn giống REVIEWS_PREVIEW_MS,
     // không dài như Recommendations/Pictures/Characters (vốn gần như tĩnh).
     const val COMMUNITY_RECOMMENDATIONS_MS = 24 * 60 * 60 * 1000L
+
+    // MVP4 "Biểu đồ phân bố điểm" + "Nhạc OP/ED" (Detail, /statistics + /themes)
+    // — số liệu thống kê nhích dần mỗi ngày nhưng không cần tươi theo giờ,
+    // nhạc OP/ED gần như KHÔNG BAO GIỜ đổi sau khi anime phát sóng xong — cả
+    // 2 dùng TTL dài như Recommendations/Pictures/Characters.
+    const val STATISTICS_MS = 7 * 24 * 60 * 60 * 1000L
+    const val THEMES_MS = 7 * 24 * 60 * 60 * 1000L
 }
 
 fun isExpired(fetchedAt: Long, ttlMs: Long, now: Long = System.currentTimeMillis()): Boolean {

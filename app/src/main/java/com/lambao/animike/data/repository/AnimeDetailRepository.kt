@@ -4,6 +4,8 @@ import androidx.paging.PagingSource
 import com.lambao.animike.data.local.CacheTtl
 import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
+import com.lambao.animike.data.local.dao.AnimeStatisticsDao
+import com.lambao.animike.data.local.dao.AnimeThemesDao
 import com.lambao.animike.data.local.dao.CharacterDao
 import com.lambao.animike.data.local.dao.PictureDao
 import com.lambao.animike.data.local.dao.ReviewPreviewDao
@@ -23,6 +25,8 @@ import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.AnimeReview
+import com.lambao.animike.domain.model.AnimeStatistics
+import com.lambao.animike.domain.model.AnimeThemes
 import com.lambao.animike.domain.model.Episode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -69,6 +73,17 @@ interface AnimeDetailRepository {
     // ngày) vì poster art của 1 anime gần như tĩnh.
     fun observePictures(malId: Int): Flow<List<String>>
     suspend fun refreshPictures(malId: Int, force: Boolean = false): ApiResult<Unit>
+
+    // SWR cho "Biểu đồ phân bố điểm" (/statistics) — 1 row/anime giống
+    // AnimeDetail, TTL dài (7 ngày) vì số liệu MAL nhích dần chứ không đổi
+    // đột ngột.
+    fun observeStatistics(malId: Int): Flow<AnimeStatistics?>
+    suspend fun refreshStatistics(malId: Int, force: Boolean = false): ApiResult<Unit>
+
+    // SWR cho "Nhạc OP/ED" (/themes) — 1 row/anime, TTL dài (7 ngày) vì OP/ED
+    // gần như KHÔNG BAO GIỜ đổi sau khi anime phát sóng xong.
+    fun observeThemes(malId: Int): Flow<AnimeThemes?>
+    suspend fun refreshThemes(malId: Int, force: Boolean = false): ApiResult<Unit>
 }
 
 private const val REVIEWS_LIMIT = 5
@@ -80,6 +95,8 @@ class AnimeDetailRepositoryImpl @Inject constructor(
     private val pictureDao: PictureDao,
     private val reviewPreviewDao: ReviewPreviewDao,
     private val characterDao: CharacterDao,
+    private val animeStatisticsDao: AnimeStatisticsDao,
+    private val animeThemesDao: AnimeThemesDao,
 ) : AnimeDetailRepository {
 
     override fun observeAnimeDetail(malId: Int): Flow<AnimeDetail?> =
@@ -252,6 +269,38 @@ class AnimeDetailRepositoryImpl @Inject constructor(
                 urls.mapIndexed { index, url -> url.toPictureEntity(malId, index, fetchedAt) }
             }
             pictureDao.replace(malId, entities)
+        }
+    }
+
+    override fun observeStatistics(malId: Int): Flow<AnimeStatistics?> =
+        animeStatisticsDao.observe(malId).map { it?.toDomain() }
+
+    override suspend fun refreshStatistics(malId: Int, force: Boolean): ApiResult<Unit> {
+        if (!force) {
+            val fetchedAt = animeStatisticsDao.getFetchedAt(malId)
+            if (fetchedAt != null && !isExpired(fetchedAt, CacheTtl.STATISTICS_MS)) {
+                return ApiResult.Success(Unit)
+            }
+        }
+        return safeApiCall {
+            val statistics = api.getAnimeStatistics(malId).data.toDomain()
+            animeStatisticsDao.upsert(statistics.toEntity(malId, System.currentTimeMillis()))
+        }
+    }
+
+    override fun observeThemes(malId: Int): Flow<AnimeThemes?> =
+        animeThemesDao.observe(malId).map { it?.toDomain() }
+
+    override suspend fun refreshThemes(malId: Int, force: Boolean): ApiResult<Unit> {
+        if (!force) {
+            val fetchedAt = animeThemesDao.getFetchedAt(malId)
+            if (fetchedAt != null && !isExpired(fetchedAt, CacheTtl.THEMES_MS)) {
+                return ApiResult.Success(Unit)
+            }
+        }
+        return safeApiCall {
+            val themes = api.getAnimeThemes(malId).data.toDomain()
+            animeThemesDao.upsert(themes.toEntity(malId, System.currentTimeMillis()))
         }
     }
 }
