@@ -4,6 +4,7 @@ import com.lambao.animike.data.remote.dto.AnimeDto
 import com.lambao.animike.data.remote.dto.AnimeFullDto
 import com.lambao.animike.data.remote.dto.AnimeStatisticsDto
 import com.lambao.animike.data.remote.dto.AnimeThemesDto
+import com.lambao.animike.data.remote.dto.AnimeVideosDto
 import com.lambao.animike.data.remote.dto.CharacterEntryDto
 import com.lambao.animike.data.remote.dto.EpisodeDto
 import com.lambao.animike.data.remote.dto.GenreDto
@@ -14,6 +15,7 @@ import com.lambao.animike.data.remote.dto.RecommendationEntryDto
 import com.lambao.animike.data.remote.dto.RecommendationPairDto
 import com.lambao.animike.data.remote.dto.ReviewDto
 import com.lambao.animike.data.remote.dto.SeasonYearDto
+import com.lambao.animike.data.remote.dto.StreamingLinkDto
 import com.lambao.animike.data.remote.dto.WatchEpisodeEntryDto
 import retrofit2.http.GET
 import retrofit2.http.Path
@@ -118,4 +120,15 @@ interface JikanApi {
     // format sẵn từ Jikan (tên bài + nghệ sĩ + khoảng tập).
     @GET("anime/{id}/themes")
     suspend fun getAnimeThemes(@Path("id") id: Int): JikanResponse<AnimeThemesDto>
+
+    // MVP4 nút "Xem trên..." — link các nền tảng streaming hợp pháp
+    // (Crunchyroll/Netflix...), danh sách ngắn không phân trang.
+    @GET("anime/{id}/streaming")
+    suspend fun getStreamingLinks(@Path("id") id: Int): JikanListResponse<StreamingLinkDto>
+
+    // MVP4 tab "Video" (promo/PV + music video) — data là 1 OBJECT (không
+    // phải list) nên dùng JikanResponse; mảng episodes bên trong CỐ Ý bỏ qua
+    // (xem AnimeVideosDto).
+    @GET("anime/{id}/videos")
+    suspend fun getAnimeVideos(@Path("id") id: Int): JikanResponse<AnimeVideosDto>
 }

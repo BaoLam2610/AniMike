@@ -6,20 +6,23 @@ import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
 import com.lambao.animike.data.local.dao.AnimeStatisticsDao
 import com.lambao.animike.data.local.dao.AnimeThemesDao
+import com.lambao.animike.data.local.dao.AnimeVideoDao
 import com.lambao.animike.data.local.dao.CharacterDao
 import com.lambao.animike.data.local.dao.PictureDao
 import com.lambao.animike.data.local.dao.ReviewPreviewDao
+import com.lambao.animike.data.local.dao.StreamingLinkDao
 import com.lambao.animike.data.local.entity.AnimeListKey
+import com.lambao.animike.data.local.entity.CachedAnimeVideoEntity
 import com.lambao.animike.data.local.entity.CachedCharacterEntity
 import com.lambao.animike.data.local.entity.CachedPictureEntity
 import com.lambao.animike.data.local.entity.CachedReviewPreviewEntity
+import com.lambao.animike.data.local.entity.CachedStreamingLinkEntity
 import com.lambao.animike.data.local.isExpired
 import com.lambao.animike.data.remote.JikanApi
 import com.lambao.animike.domain.mapper.toCharacterEntity
 import com.lambao.animike.domain.mapper.toDomain
 import com.lambao.animike.domain.mapper.toEntity
 import com.lambao.animike.domain.mapper.toListEntity
-import com.lambao.animike.domain.mapper.toPictureEntity
 import com.lambao.animike.domain.mapper.toPreviewEntity
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeCharacter
@@ -27,7 +30,10 @@ import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.AnimeReview
 import com.lambao.animike.domain.model.AnimeStatistics
 import com.lambao.animike.domain.model.AnimeThemes
+import com.lambao.animike.domain.model.AnimeVideo
 import com.lambao.animike.domain.model.Episode
+import com.lambao.animike.domain.model.Picture
+import com.lambao.animike.domain.model.StreamingLink
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -71,7 +77,7 @@ interface AnimeDetailRepository {
 
     // SWR cho bộ sưu tập ảnh (/pictures — FEATURES.md mục 1.3). TTL dài (7
     // ngày) vì poster art của 1 anime gần như tĩnh.
-    fun observePictures(malId: Int): Flow<List<String>>
+    fun observePictures(malId: Int): Flow<List<Picture>>
     suspend fun refreshPictures(malId: Int, force: Boolean = false): ApiResult<Unit>
 
     // SWR cho "Biểu đồ phân bố điểm" (/statistics) — 1 row/anime giống
@@ -84,6 +90,16 @@ interface AnimeDetailRepository {
     // gần như KHÔNG BAO GIỜ đổi sau khi anime phát sóng xong.
     fun observeThemes(malId: Int): Flow<AnimeThemes?>
     suspend fun refreshThemes(malId: Int, force: Boolean = false): ApiResult<Unit>
+
+    // SWR cho nút "Xem trên..." (/streaming) — nền tảng phát hành gần như
+    // tĩnh, TTL dài (7 ngày).
+    fun observeStreamingLinks(malId: Int): Flow<List<StreamingLink>>
+    suspend fun refreshStreamingLinks(malId: Int, force: Boolean = false): ApiResult<Unit>
+
+    // SWR cho tab "Video" (/videos: promo + music video, BỎ episodes vì trùng
+    // /videos/episodes) — danh sách PV/MV gần như tĩnh, TTL dài (7 ngày).
+    fun observeVideos(malId: Int): Flow<List<AnimeVideo>>
+    suspend fun refreshVideos(malId: Int, force: Boolean = false): ApiResult<Unit>
 }
 
 private const val REVIEWS_LIMIT = 5
@@ -97,6 +113,8 @@ class AnimeDetailRepositoryImpl @Inject constructor(
     private val characterDao: CharacterDao,
     private val animeStatisticsDao: AnimeStatisticsDao,
     private val animeThemesDao: AnimeThemesDao,
+    private val streamingLinkDao: StreamingLinkDao,
+    private val animeVideoDao: AnimeVideoDao,
 ) : AnimeDetailRepository {
 
     override fun observeAnimeDetail(malId: Int): Flow<AnimeDetail?> =
@@ -223,6 +241,10 @@ class AnimeDetailRepositoryImpl @Inject constructor(
                         username = "",
                         score = null,
                         reviewText = "",
+                        userAvatarUrl = null,
+                        date = null,
+                        tag = null,
+                        reactionsEncoded = null,
                         position = 0,
                         fetchedAt = fetchedAt,
                     ),
@@ -237,10 +259,10 @@ class AnimeDetailRepositoryImpl @Inject constructor(
     override fun reviewsPagingSource(malId: Int): PagingSource<Int, AnimeReview> =
         AnimeReviewsPagingSource(api, malId)
 
-    override fun observePictures(malId: Int): Flow<List<String>> =
-        // url rỗng: lọc bỏ sentinel row (xem refreshPictures).
+    override fun observePictures(malId: Int): Flow<List<Picture>> =
+        // fullUrl rỗng: lọc bỏ sentinel row (xem refreshPictures).
         pictureDao.observe(malId).map { entities ->
-            entities.filter { it.url.isNotEmpty() }.map { it.toDomain() }
+            entities.filter { it.fullUrl.isNotEmpty() }.map { it.toDomain() }
         }
 
     override suspend fun refreshPictures(malId: Int, force: Boolean): ApiResult<Unit> {
@@ -251,22 +273,31 @@ class AnimeDetailRepositoryImpl @Inject constructor(
             }
         }
         return safeApiCall {
-            // distinct(): Jikan đôi khi trả trùng URL trong cùng response —
-            // URL cũng là key của LazyRow ở UI nên phải duy nhất. isNotBlank():
-            // phòng field trả về chuỗi rỗng thay vì null (Jikan chỉ đảm bảo
-            // nullable, không đảm bảo non-blank khi có giá trị) — chuỗi rỗng
-            // thật sẽ trùng sentinel bên dưới và bị lọc mất oan nếu không chặn ở đây.
-            val urls = api.getPictures(malId).data
-                .mapNotNull { it.jpg?.largeImageUrl ?: it.jpg?.imageUrl }
-                .filter { it.isNotBlank() }
-                .distinct()
+            // thumbnailUrl (image_url) cho grid nhỏ, fullUrl (large_image_url
+            // ưu tiên) cho viewer full-screen — TÁCH 2 field theo yêu cầu user
+            // (viewer phải hiện ảnh nét nhất, grid không cần tải ảnh nặng).
+            // distinctBy fullUrl: Jikan đôi khi trả trùng ảnh trong cùng
+            // response — fullUrl cũng là 1 nửa PK composite nên phải duy
+            // nhất. isNotBlank(): phòng field trả về chuỗi rỗng thay vì null
+            // (Jikan chỉ đảm bảo nullable, không đảm bảo non-blank khi có
+            // giá trị) — chuỗi rỗng thật sẽ trùng sentinel bên dưới và bị
+            // lọc mất oan nếu không chặn ở đây.
+            val pictures = api.getPictures(malId).data
+                .mapNotNull { picture ->
+                    val full = picture.jpg?.largeImageUrl?.takeIf { it.isNotBlank() }
+                        ?: picture.jpg?.imageUrl?.takeIf { it.isNotBlank() }
+                        ?: return@mapNotNull null
+                    val thumbnail = picture.jpg?.imageUrl?.takeIf { it.isNotBlank() } ?: full
+                    Picture(thumbnailUrl = thumbnail, fullUrl = full)
+                }
+                .distinctBy { it.fullUrl }
             val fetchedAt = System.currentTimeMillis()
-            val entities = if (urls.isEmpty()) {
-                // Sentinel row (url rỗng, không phải URL thật) — cùng lý do
-                // với Recommendations/Reviews ở trên.
-                listOf(CachedPictureEntity(malId = malId, url = "", position = 0, fetchedAt = fetchedAt))
+            val entities = if (pictures.isEmpty()) {
+                // Sentinel row (fullUrl rỗng, không phải URL thật) — cùng lý
+                // do với Recommendations/Reviews ở trên.
+                listOf(CachedPictureEntity(malId = malId, thumbnailUrl = "", fullUrl = "", position = 0, fetchedAt = fetchedAt))
             } else {
-                urls.mapIndexed { index, url -> url.toPictureEntity(malId, index, fetchedAt) }
+                pictures.mapIndexed { index, picture -> picture.toEntity(malId, index, fetchedAt) }
             }
             pictureDao.replace(malId, entities)
         }
@@ -301,6 +332,74 @@ class AnimeDetailRepositoryImpl @Inject constructor(
         return safeApiCall {
             val themes = api.getAnimeThemes(malId).data.toDomain()
             animeThemesDao.upsert(themes.toEntity(malId, System.currentTimeMillis()))
+        }
+    }
+
+    override fun observeStreamingLinks(malId: Int): Flow<List<StreamingLink>> =
+        // url rỗng: lọc bỏ sentinel row (xem refreshStreamingLinks).
+        streamingLinkDao.observe(malId).map { entities ->
+            entities.filter { it.url.isNotEmpty() }.map { it.toDomain() }
+        }
+
+    override suspend fun refreshStreamingLinks(malId: Int, force: Boolean): ApiResult<Unit> {
+        if (!force) {
+            val fetchedAt = streamingLinkDao.getFetchedAt(malId)
+            if (fetchedAt != null && !isExpired(fetchedAt, CacheTtl.STREAMING_MS)) {
+                return ApiResult.Success(Unit)
+            }
+        }
+        return safeApiCall {
+            // distinctBy url: url là 1 nửa primary key composite — trùng sẽ
+            // REPLACE âm thầm và lệch position (cùng lý do với Characters).
+            val links = api.getStreamingLinks(malId).data.mapNotNull { it.toDomain() }.distinctBy { it.url }
+            val fetchedAt = System.currentTimeMillis()
+            val entities = if (links.isEmpty()) {
+                // Sentinel row (url rỗng, mapper đã chặn url blank nên không
+                // đụng dữ liệu thật) — cùng lý do với Recommendations/Pictures.
+                listOf(CachedStreamingLinkEntity(malId = malId, url = "", name = "", position = 0, fetchedAt = fetchedAt))
+            } else {
+                links.mapIndexed { index, link -> link.toEntity(malId, index, fetchedAt) }
+            }
+            streamingLinkDao.replace(malId, entities)
+        }
+    }
+
+    override fun observeVideos(malId: Int): Flow<List<AnimeVideo>> =
+        // youtubeId rỗng: lọc bỏ sentinel row (xem refreshVideos).
+        animeVideoDao.observe(malId).map { entities ->
+            entities.filter { it.youtubeId.isNotEmpty() }.map { it.toDomain() }
+        }
+
+    override suspend fun refreshVideos(malId: Int, force: Boolean): ApiResult<Unit> {
+        if (!force) {
+            val fetchedAt = animeVideoDao.getFetchedAt(malId)
+            if (fetchedAt != null && !isExpired(fetchedAt, CacheTtl.VIDEOS_MS)) {
+                return ApiResult.Success(Unit)
+            }
+        }
+        return safeApiCall {
+            // distinctBy youtubeId: youtubeId là 1 nửa primary key composite
+            // — 1 video có thể xuất hiện ở cả promo lẫn MV (hiếm nhưng không
+            // loại trừ), trùng sẽ REPLACE âm thầm và lệch position.
+            val videos = api.getAnimeVideos(malId).data.toDomain().distinctBy { it.youtubeId }
+            val fetchedAt = System.currentTimeMillis()
+            val entities = if (videos.isEmpty()) {
+                // Sentinel row (youtubeId rỗng, mapper đã bỏ item thiếu id nên
+                // không đụng dữ liệu thật) — cùng lý do với các cache list khác.
+                listOf(
+                    CachedAnimeVideoEntity(
+                        malId = malId,
+                        youtubeId = "",
+                        title = "",
+                        subtitle = null,
+                        position = 0,
+                        fetchedAt = fetchedAt,
+                    ),
+                )
+            } else {
+                videos.mapIndexed { index, video -> video.toEntity(malId, index, fetchedAt) }
+            }
+            animeVideoDao.replace(malId, entities)
         }
     }
 }

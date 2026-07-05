@@ -42,6 +42,8 @@ class DetailViewModel @Inject constructor(
         observeReviewPreview()
         observePictures()
         observeThemes()
+        observeStreamingLinks()
+        observeVideos()
         observeFavoriteStatus()
         loadJob = viewModelScope.launch { loadAll() }
     }
@@ -71,6 +73,8 @@ class DetailViewModel @Inject constructor(
 
             is DetailEvent.OnTrailerClick -> sendEffect(DetailEffect.OpenYoutube(event.youtubeId))
 
+            is DetailEvent.OnStreamingLinkClick -> sendEffect(DetailEffect.OpenExternalUrl(event.url))
+
             DetailEvent.OnFavoriteClick -> {
                 // Bỏ qua nếu lần toggle trước chưa xong — tránh double-tap bắn
                 // nhiều coroutine gần như đồng thời (dù DAO đã transaction-safe,
@@ -97,6 +101,13 @@ class DetailViewModel @Inject constructor(
             DetailEvent.OnSeeAllCharactersClick -> sendEffect(DetailEffect.NavigateToCharacters(malId))
 
             DetailEvent.OnSeeAllReviewsClick -> sendEffect(DetailEffect.NavigateToReviews(malId))
+
+            is DetailEvent.OnReviewClick -> {
+                setState { copy(selectedReview = event.review) }
+                sendEffect(DetailEffect.NavigateToReviewDetail)
+            }
+
+            is DetailEvent.OnDownloadPictureClick -> sendEffect(DetailEffect.DownloadPicture(event.url))
         }
     }
 
@@ -150,6 +161,22 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    private fun observeStreamingLinks() {
+        viewModelScope.launch {
+            repository.observeStreamingLinks(malId).collect { links ->
+                setState { copy(streamingLinks = links) }
+            }
+        }
+    }
+
+    private fun observeVideos() {
+        viewModelScope.launch {
+            repository.observeVideos(malId).collect { videos ->
+                setState { copy(videos = videos) }
+            }
+        }
+    }
+
     private fun observeFavoriteStatus() {
         viewModelScope.launch {
             favoriteRepository.observeIsFavorite(malId).collect { isFavorite ->
@@ -179,6 +206,13 @@ class DetailViewModel @Inject constructor(
             }
         }
 
+        // Streaming links refresh NGAY SAU detail (trước cả episodes) — thứ tự
+        // chuỗi tuần tự khớp thứ tự HIỂN THỊ: StreamingLinksRow render gần đầu
+        // màn (dưới GenreChips), nếu để cuối chuỗi (như bản đầu) thì vùng user
+        // nhìn thấy ngay lại có data về muộn nhất (~4-8s cold cache) và row
+        // "mọc" ra đẩy layout đúng lúc đang đọc (phát hiện qua review, sửa).
+        loadMutex.withLock { repository.refreshStreamingLinks(malId, force) }
+
         // Episodes KHÔNG cache — luôn gọi lại, set thẳng ở đây (không qua Flow
         // như các mục dưới vì không có Room đứng giữa).
         val episodesResult = loadMutex.withLock { repository.getEpisodes(malId) }
@@ -186,16 +220,19 @@ class DetailViewModel @Inject constructor(
             setState { copy(episodes = episodesResult.data) }
         }
 
-        // Characters/recommendations/reviews/pictures/themes: không setState
-        // thủ công — observeXxx() (Flow từ Room) trong init đã tự cập nhật
-        // state reactively khi refresh xong. refreshXxx tự quyết định gọi API
-        // hay không dựa TTL (force=true khi pull-to-refresh sẽ bỏ qua TTL).
-        // "Thống kê" ĐÃ CHUYỂN sang ReviewsViewModel (màn Đánh giá "Xem tất
-        // cả") — không còn refresh ở đây, xem docs/ROADMAP.md.
+        // Characters/recommendations/reviews/pictures/themes/videos: không
+        // setState thủ công — observeXxx() (Flow từ Room) trong init đã tự
+        // cập nhật state reactively khi refresh xong. refreshXxx tự quyết
+        // định gọi API hay không dựa TTL (force=true khi pull-to-refresh sẽ bỏ
+        // qua TTL). Videos để CUỐI vì tab Video nằm đáy trang (cùng logic thứ
+        // tự-theo-hiển-thị với streaming ở trên). "Thống kê" ĐÃ CHUYỂN sang
+        // ReviewsViewModel (màn Đánh giá "Xem tất cả") — không còn refresh ở
+        // đây, xem docs/ROADMAP.md.
         loadMutex.withLock { repository.refreshCharacters(malId, force) }
         loadMutex.withLock { repository.refreshRecommendations(malId, force) }
         loadMutex.withLock { repository.refreshReviewPreview(malId, force) }
         loadMutex.withLock { repository.refreshPictures(malId, force) }
         loadMutex.withLock { repository.refreshThemes(malId, force) }
+        loadMutex.withLock { repository.refreshVideos(malId, force) }
     }
 }

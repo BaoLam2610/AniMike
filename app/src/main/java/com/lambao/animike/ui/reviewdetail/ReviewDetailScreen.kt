@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,37 +25,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.lambao.animike.domain.model.AnimeReview
 import com.lambao.animike.domain.model.ReviewReactions
 import com.lambao.animike.domain.model.ReviewTag
 import com.lambao.animike.ui.components.BackButton
-import com.lambao.animike.ui.reviews.ReviewsViewModel
 import com.lambao.animike.ui.theme.Dimens
 import com.lambao.animike.ui.theme.success
 
 /**
- * Xem đầy đủ 1 review (avatar/date/tag/reactions/text KHÔNG bị maxLines cắt) —
- * mở từ ReviewsScreen khi bấm vào 1 ReviewCard. Dùng chung ReviewsViewModel
- * (scope theo backstack entry của Routes.REVIEWS trong AniMikeNavHost, giống
- * SearchFilterScreen/SearchViewModel) thay vì tự fetch lại — Paging 3 không
- * có cách tra cứu "item theo id" nên review được lưu thẳng trong
- * ReviewsState.selectedReview khi bấm, không truyền qua nav argument.
+ * Xem đầy đủ 1 review (avatar/date/tag/reactions/text KHÔNG bị maxLines cắt).
+ * KHÔNG tự có ViewModel — nhận thẳng `review` làm tham số, vì có 2 nơi mở màn
+ * này với 2 nguồn dữ liệu khác nhau (ReviewsScreen: ReviewsViewModel.selectedReview;
+ * tab "Đánh giá" ở Detail: DetailViewModel.selectedReview) — Paging 3 không có
+ * cách tra cứu "item theo id" nên mỗi nơi tự lưu review đang xem vào state của
+ * chính ViewModel đó, và composable() ở AniMikeNavHost đọc đúng state rồi
+ * truyền xuống đây, không truyền qua nav argument.
  */
 @Composable
-fun ReviewDetailScreen(
-    onBackClick: () -> Unit,
-    // KHÔNG có default hiltViewModel(): màn này bắt buộc dùng CÙNG instance
-    // ReviewsViewModel với ReviewsScreen (xem lý do ở SearchFilterScreen).
-    viewModel: ReviewsViewModel,
-) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    ReviewDetailScreenContent(review = state.selectedReview, onBackClick = onBackClick)
-}
-
-@Composable
-private fun ReviewDetailScreenContent(review: AnimeReview?, onBackClick: () -> Unit) {
+fun ReviewDetailScreen(review: AnimeReview?, onBackClick: () -> Unit) {
     // contentWindowInsets = 0: AniMikeNavHost đã có Scaffold ngoài tiêu thụ
     // insets — tránh tiêu thụ 2 lần gây khoảng trắng dư quanh status bar.
     Scaffold(modifier = Modifier.fillMaxSize(), contentWindowInsets = WindowInsets(0)) { padding ->

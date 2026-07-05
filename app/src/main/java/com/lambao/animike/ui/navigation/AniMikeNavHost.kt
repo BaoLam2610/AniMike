@@ -15,10 +15,12 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -32,6 +34,7 @@ import com.lambao.animike.ui.browse.BrowseScreen
 import com.lambao.animike.ui.characters.CharactersScreen
 import com.lambao.animike.ui.communityrecommendations.CommunityRecommendationsScreen
 import com.lambao.animike.ui.detail.DetailScreen
+import com.lambao.animike.ui.detail.DetailViewModel
 import com.lambao.animike.ui.episodes.EpisodesScreen
 import com.lambao.animike.ui.favorites.FavoritesScreen
 import com.lambao.animike.ui.home.HomeScreen
@@ -252,14 +255,18 @@ fun AniMikeNavHost() {
             composable(
                 route = Routes.DETAIL,
                 arguments = listOf(navArgument(Routes.DETAIL_ARG_MAL_ID) { type = NavType.IntType }),
-            ) {
+            ) { backStackEntry ->
                 // malId được DetailViewModel tự đọc qua SavedStateHandle, không cần truyền tay.
+                // Truyền viewModel tường minh (thay vì default hiltViewModel()) để
+                // DETAIL_REVIEW_DETAIL lấy lại ĐÚNG instance này qua getBackStackEntry.
                 DetailScreen(
                     onBackClick = navController::popBackStack,
                     onNavigateToDetail = { malId -> navController.navigate(Routes.detail(malId)) },
                     onNavigateToEpisodes = { malId -> navController.navigate(Routes.episodes(malId)) },
                     onNavigateToCharacters = { malId -> navController.navigate(Routes.characters(malId)) },
                     onNavigateToReviews = { malId -> navController.navigate(Routes.reviews(malId)) },
+                    onNavigateToReviewDetail = { navController.navigate(Routes.DETAIL_REVIEW_DETAIL) },
+                    viewModel = hiltViewModel(backStackEntry),
                 )
             }
             composable(
@@ -293,10 +300,24 @@ fun AniMikeNavHost() {
                 // Dùng chung ReviewsViewModel với Routes.REVIEWS (scope theo backstack
                 // entry của route cha) — review đang xem đã lưu sẵn trong
                 // ReviewsState.selectedReview lúc bấm, không cần fetch lại/truyền arg.
+                // ReviewDetailScreen không tự có ViewModel (dùng ở cả đây lẫn
+                // DETAIL_REVIEW_DETAIL bên dưới) nên tự collect state ở đây rồi
+                // truyền review xuống làm tham số thuần.
                 val reviewsEntry = remember(it) { navController.getBackStackEntry(Routes.REVIEWS) }
+                val reviewsState by hiltViewModel<ReviewsViewModel>(reviewsEntry).state.collectAsStateWithLifecycle()
                 ReviewDetailScreen(
+                    review = reviewsState.selectedReview,
                     onBackClick = navController::popBackStack,
-                    viewModel = hiltViewModel<ReviewsViewModel>(reviewsEntry),
+                )
+            }
+            composable(Routes.DETAIL_REVIEW_DETAIL) {
+                // Tương tự REVIEW_DETAIL nhưng dùng chung DetailViewModel (tab
+                // "Đánh giá" ở Detail) — xem comment ở Routes.DETAIL_REVIEW_DETAIL.
+                val detailEntry = remember(it) { navController.getBackStackEntry(Routes.DETAIL) }
+                val detailState by hiltViewModel<DetailViewModel>(detailEntry).state.collectAsStateWithLifecycle()
+                ReviewDetailScreen(
+                    review = detailState.selectedReview,
+                    onBackClick = navController::popBackStack,
                 )
             }
         }

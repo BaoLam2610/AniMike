@@ -3,6 +3,12 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Nút tải ảnh xuống ở Detail (MVP4) — DownloadManager ghi thư mục
+         Pictures công khai. CHỈ cần trên API 24-28 (scoped storage từ API 29
+         không yêu cầu quyền này nữa cho DownloadManager). -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application
         android:name=".AniMikeApplication"

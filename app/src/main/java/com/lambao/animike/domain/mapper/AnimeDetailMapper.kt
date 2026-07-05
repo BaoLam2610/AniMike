@@ -21,7 +21,9 @@ private val youtubeIdInUrlRegex = Regex("""(?:embed/|v=|youtu\.be/)($YOUTUBE_ID_
 
 // youtube_id đôi khi null dù trailer tồn tại (VD anime 38524 chỉ có embed_url)
 // — rút id từ embed_url/url làm fallback để nút trailer không biến mất oan.
-private fun TrailerDto.resolveYoutubeId(): String? =
+// internal (không private): AnimeVideosMapper tái dùng cho promo/music video
+// của /anime/{id}/videos — cùng shape TrailerDto, cùng data quirk.
+internal fun TrailerDto.resolveYoutubeId(): String? =
     youtubeId?.takeIf { youtubeIdOnlyRegex.matches(it) }
         ?: listOfNotNull(embedUrl, url)
             .firstNotNullOfOrNull { youtubeIdInUrlRegex.find(it)?.groupValues?.get(1) }

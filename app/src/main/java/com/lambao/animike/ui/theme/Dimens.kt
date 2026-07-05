@@ -55,4 +55,9 @@ object Dimens {
     // seiyuu/character ở Detail) vì đây chỉ là icon phụ cạnh username, không
     // phải nội dung chính của item.
     val ReviewAvatarSize = 36.dp
+
+    // Tab "Video" ở Detail (MVP4) — card thumbnail 16:9 rộng hơn
+    // EpisodeCardWidth (140dp) vì title promo/MV dài hơn ("PV 1 English dub
+    // version") + có dòng subtitle bài hát/nghệ sĩ cho MV.
+    val VideoCardWidth = 200.dp
 }

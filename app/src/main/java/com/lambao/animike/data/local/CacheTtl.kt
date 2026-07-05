@@ -29,6 +29,12 @@ object CacheTtl {
     // 2 dùng TTL dài như Recommendations/Pictures/Characters.
     const val STATISTICS_MS = 7 * 24 * 60 * 60 * 1000L
     const val THEMES_MS = 7 * 24 * 60 * 60 * 1000L
+
+    // MVP4 nút "Xem trên..." + tab "Video" (Detail, /streaming + /videos) —
+    // nền tảng phát hành và danh sách PV/MV gần như tĩnh sau khi anime lên
+    // sóng, TTL dài như nhóm trên.
+    const val STREAMING_MS = 7 * 24 * 60 * 60 * 1000L
+    const val VIDEOS_MS = 7 * 24 * 60 * 60 * 1000L
 }
 
 fun isExpired(fetchedAt: Long, ttlMs: Long, now: Long = System.currentTimeMillis()): Boolean {

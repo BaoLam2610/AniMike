@@ -1,7 +1,7 @@
 # AniMike — Roadmap & Quy trình phát triển
 
 Hiện trạng project: Kotlin + Jetpack Compose (Material 3), minSdk 24, targetSdk 36.
-Đã hoàn thành Phase 0a → MVP 1 (Phase 3) + Season Archive — đang ở MVP 2 (Phase 4).
+Đã hoàn thành Phase 0a → MVP 4 (Khám phá) — tiếp theo là MVP 5 (Nhân vật / Người / Studio).
 
 **Skills & agents đã cài trong `.claude/`** (Claude Code tự nhận, xem `CLAUDE.md` ở root):
 - `skills/compose-expert` — guide Compose chuyên sâu (24 references + source androidx)
@@ -163,7 +163,7 @@ Nguyên tắc: mỗi MVP là một đợt nhỏ, **xong hẳn (build + review + 
 - Icon app / splash / release build: **hoãn** — dự án cá nhân chưa cần publish, dồn
   splash vào MVP 3 UI-1, release build để khi nào thực sự cần cài lâu dài
 
-### MVP 3 — Nâng cấp UI theo kit Animax ← ĐANG LÀM
+### MVP 3 — Nâng cấp UI theo kit Animax ✅ (2026-07)
 Ảnh tham chiếu đã export tại `docs/UI/` (27 màn, đặt tên `{số}_{Dark|Light}_{tên màn}.png`)
 — **không cần mockup riêng nữa, ảnh kit chính là mockup**. Đánh giá khả thi so với Jikan:
 làm giống được ~80%; không làm được Play/Download video (Jikan chỉ có metadata — xem
@@ -238,7 +238,7 @@ Triển khai lần lượt từng đợt, mỗi đợt: code → build → compo
 Tính năng mở rộng Detail (từng nằm ở MVP 3 cũ, chuyển sang MVP 4 vì thuộc nhóm dữ liệu mới):
 nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`)
 
-### MVP 4 — Khám phá
+### MVP 4 — Khám phá ✅ (2026-07)
 - [x] **Random anime "Hôm nay xem gì?"** ✅ — card ngang trong Home (giữa hero
   và "Top Hits Anime", không có mockup nên tự thiết kế theo token
   animike-design): icon dice, bấm vào gọi `/random/anime` rồi điều hướng
@@ -345,9 +345,93 @@ nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`)
   - "Thống kê" đổi từ sibling cố định phía trên thành item ĐẦU trong chính
     `LazyColumn` của danh sách review (theo yêu cầu user) — cuộn xuống thì
     thống kê cuộn theo luôn thay vì chiếm chỗ cố định trên đầu màn hình.
-- [ ] Nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`) — chuyển từ MVP 3 cũ
-
-### MVP 5 — Nhân vật / Người / Studio
+- [x] **Nút "Xem trên..." + tab "Video"** ✅ — mục cuối cùng của MVP4 (chuyển
+  từ MVP 3 cũ), verify cả 2 endpoint qua curl (anime 1 + 20) trước khi code:
+  - **"Xem trên..."** (`/anime/{id}/streaming`): response chỉ `{name, url}`
+    (~1-5 nền tảng hợp pháp: Crunchyroll/Netflix/Tubi...). UI = 1 hàng chip
+    cuộn ngang đặt ngay dưới GenreChips (hành động chính của người muốn XEM
+    phim, càng gần đầu càng dễ thấy; chip nền primary-nhạt để phân biệt với
+    GenreChips thuần hiển thị). Bấm mở browser ngoài qua effect MỚI
+    `DetailEffect.OpenExternalUrl` (tách khỏi `OpenYoutube` vì bên đó build
+    URL từ videoId đã sanitize, còn đây là URL nguyên bản từ Jikan).
+  - **Tab "Video"** (`/anime/{id}/videos`): response là 1 OBJECT
+    `{promo, music_videos, episodes}` — mảng `episodes` CỐ Ý bỏ qua không
+    khai trong DTO (trùng hoàn toàn `/videos/episodes` đã dùng cho
+    EpisodesSection). promo dùng field `trailer`, music_videos dùng field
+    `video` — cả 2 cùng shape `TrailerDto` nên tái dùng, và cùng data quirk
+    `youtube_id` NULL chỉ có `embed_url` → tái dùng `resolveYoutubeId()` (đổi
+    private → internal); `images` cũng LUÔN null nên thumbnail derive từ
+    youtubeId (cùng kỹ thuật `trailerThumbnailUrl`). Gộp promo + MV thành 1
+    model `AnimeVideo` (subtitle = "bài hát — nghệ sĩ" từ `meta` cho MV, null
+    cho promo), hiển thị làm **tab thứ 4** trong `ExploreTabsSection` (cùng
+    lý do gộp với Nhạc phim: đỡ dài Detail) — card 16:9 kiểu EpisodeItem kèm
+    play overlay như TrailerCard, bấm gửi cùng event `OnTrailerClick` (cùng
+    hành vi "mở 1 video YouTube").
+  - Cache Room: 2 bảng list mới `cached_streaming_link` (PK malId+url) +
+    `cached_anime_video` (PK malId+youtubeId), sentinel row khi rỗng thật,
+    TTL 7 ngày (`CacheTtl.STREAMING_MS`/`VIDEOS_MS` — nền tảng phát hành và
+    danh sách PV/MV gần như tĩnh sau khi anime lên sóng). DB version 9→10.
+    Cả 2 tải tuần tự trong `loadAll` + được pull-to-refresh force cùng nhóm.
+  - **Phát hiện sau khi dùng thử**: `/videos.promo[0]` và `/full.trailer`
+    (đã hiện riêng ở `TrailerCard`) LÀ CÙNG 1 VIDEO — verify qua curl (anime
+    1: cả 2 cùng `embed_url` youtube `gY5nDXOtv_o`) — Jikan trả trùng lặp có
+    chủ đích giữa 2 endpoint. Không lọc thì user thấy y hệt 1 trailer ở cả
+    "Xem trailer" lẫn đầu tab "Video". Sửa bằng computed property
+    `DetailState.tabVideos` (cùng pattern `CharactersState.filteredCharacters`
+    — lọc ở State, không phải trong composable) loại video có `youtubeId`
+    trùng `detail.trailerYoutubeId`, vẫn giữ các promo/MV KHÁC (PV 2, PV 3,
+    music video...).
+- [x] **Nâng cao Đánh giá + Hình ảnh ở Detail** ✅ — 2 cải tiến hậu-MVP4:
+  - **Tab "Đánh giá" đồng bộ với ReviewsScreen**: trước đây tab preview ở
+    Detail dùng bản `ReviewCard` đơn giản (username/score/text, không click)
+    trong khi ReviewsScreen đã có avatar/date/tag/reactions + click mở
+    `ReviewDetailScreen`. Theo yêu cầu user: đồng bộ 2 nơi. Thực hiện:
+    - Extract `ReviewCard`/`ReviewTagBadge` thành component dùng chung ở
+      `ui/components/ReviewCard.kt` (dùng ở cả ReviewsScreen lẫn tab Detail).
+    - Mở rộng `CachedReviewPreviewEntity` (preview top-5 ở Detail) thêm
+      `userAvatarUrl`/`date`/`tag`/`reactionsEncoded` — trước đây CỐ TÌNH chỉ
+      lưu 4 field tối thiểu (quyết định đó nay đảo ngược vì user muốn đồng bộ
+      hiển thị thật, không chỉ đồng bộ component). `reactionsEncoded` dùng
+      delimiter ASCII (8 số nối bằng `:::`) — cùng kỹ thuật
+      `CachedAnimeStatisticsMapper`. DB version 10→11.
+    - `ReviewDetailScreen` đổi từ "nhận `ViewModel: ReviewsViewModel`" (khi
+      mới tạo, chỉ 1 nơi mở) thành **stateless** — nhận thẳng `review:
+      AnimeReview?` làm tham số, vì giờ có 2 nơi mở màn này với 2 nguồn khác
+      nhau (ReviewsViewModel.selectedReview / DetailViewModel.selectedReview).
+      2 route riêng cùng trỏ 1 composable: `Routes.REVIEW_DETAIL` (từ
+      ReviewsScreen, đọc ReviewsViewModel qua backstack entry của
+      `Routes.REVIEWS`) và `Routes.DETAIL_REVIEW_DETAIL` (từ tab Detail, đọc
+      DetailViewModel qua backstack entry của `Routes.DETAIL`) — route tách
+      riêng vì `getBackStackEntry(Routes.REVIEWS)` sẽ crash nếu gọi từ luồng
+      Detail (không đứng sau Routes.REVIEWS trên backstack).
+    - `DetailContract` thêm `selectedReview`/`OnReviewClick`/
+      `NavigateToReviewDetail` — cùng pattern với `ReviewsContract`.
+  - **Viewer "Hình ảnh" hiện ảnh nét nhất + nút tải xuống**: trước đây
+    `PicturesSection`/`PictureViewerDialog` dùng CHUNG 1 url (đã ưu tiên
+    `large_image_url`) cho cả grid preview lẫn viewer full-screen — nghĩa là
+    grid phải tải ảnh độ phân giải lớn chỉ để hiển thị thumbnail 2:3 nhỏ.
+    Theo yêu cầu user: viewer phải hiện ảnh nét nhất (tường minh, không tình
+    cờ) + có nút tải xuống. Thực hiện:
+    - Domain model mới `Picture(thumbnailUrl, fullUrl)` thay `String` đơn —
+      `thumbnailUrl` = `image_url` (vừa, cho grid), `fullUrl` =
+      `large_image_url` ưu tiên (cho viewer). `CachedPictureEntity` đổi PK từ
+      `url` sang `fullUrl`. DB version 11→12.
+    - Viewer thêm nút "⬇" (top-start, đối xứng nút đóng "✕" top-end — bố cục
+      toolbar quen thuộc kiểu Google Photos) gửi `DetailEvent.
+      OnDownloadPictureClick(fullUrl)` → `DetailEffect.DownloadPicture` →
+      `DownloadManager.enqueue(...)` lưu vào `DIRECTORY_PICTURES` công khai
+      (Photos/Gallery tự quét thấy) kèm Toast xác nhận. Thêm quyền
+      `WRITE_EXTERNAL_STORAGE` (`maxSdkVersion="28"` trong Manifest — API 29+
+      scoped storage không cần quyền này cho DownloadManager ghi thư mục
+      công khai).
+      **Sửa qua review**: bản đầu chỉ khai quyền trong Manifest — SAI, vì
+      `WRITE_EXTERNAL_STORAGE` là dangerous permission từ API 23 nên vẫn phải
+      xin RUNTIME trên API 23-28 thật (miễn trừ scoped-storage áp dụng theo
+      API của THIẾT BỊ đang chạy, không phải targetSdk của app), nếu không
+      nút tải sẽ LUÔN thất bại (không phải hiếm) trên mọi máy API 24-28. Sửa
+      bằng `rememberLauncherForActivityResult(RequestPermission())` trong
+      `DetailScreen`, chỉ xin quyền khi `SDK_INT` nằm trong khoảng 23..28 và
+      chưa được cấp; API 29+ gọi thẳng không cần xin.
 - [ ] Top nhân vật (`/top/characters`), trang nhân vật (`/characters/{id}/full`)
 - [ ] Trang seiyuu/staff (`/people/{id}/full`, `/anime/{id}/staff`)
 - [ ] Trang studio (`/producers/{id}/full`) — bấm tên studio ở Detail để mở

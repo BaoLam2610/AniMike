@@ -23,6 +23,11 @@ object Routes {
     // Dùng chung ReviewsViewModel với REVIEWS (giống SEARCH_FILTER/SearchViewModel)
     // — review đang xem lưu trong ReviewsState.selectedReview, không cần arg.
     const val REVIEW_DETAIL = "reviews/detail"
+    // Tương tự REVIEW_DETAIL nhưng cho tab "Đánh giá" ở Detail — dùng chung
+    // DetailViewModel (DetailState.selectedReview), route riêng vì
+    // getBackStackEntry(Routes.REVIEWS) sẽ crash nếu gọi khi KHÔNG đứng sau
+    // Routes.REVIEWS trên backstack (trường hợp mở từ Detail).
+    const val DETAIL_REVIEW_DETAIL = "detail/review-detail"
     // "Xem tất cả" từ Home (Top Hits / Sắp chiếu) — source là AnimeListSource.name
     const val ANIME_LIST = "animeList/{source}"
     const val ANIME_LIST_ARG_SOURCE = "source"

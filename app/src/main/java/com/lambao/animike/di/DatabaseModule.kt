@@ -7,6 +7,7 @@ import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
 import com.lambao.animike.data.local.dao.AnimeStatisticsDao
 import com.lambao.animike.data.local.dao.AnimeThemesDao
+import com.lambao.animike.data.local.dao.AnimeVideoDao
 import com.lambao.animike.data.local.dao.CharacterDao
 import com.lambao.animike.data.local.dao.CommunityRecommendationDao
 import com.lambao.animike.data.local.dao.FavoriteDao
@@ -15,6 +16,7 @@ import com.lambao.animike.data.local.dao.NewEpisodeDao
 import com.lambao.animike.data.local.dao.PictureDao
 import com.lambao.animike.data.local.dao.ReviewPreviewDao
 import com.lambao.animike.data.local.dao.SeasonYearDao
+import com.lambao.animike.data.local.dao.StreamingLinkDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -74,4 +76,10 @@ object DatabaseModule {
 
     @Provides
     fun provideAnimeThemesDao(database: AppDatabase): AnimeThemesDao = database.animeThemesDao()
+
+    @Provides
+    fun provideStreamingLinkDao(database: AppDatabase): StreamingLinkDao = database.streamingLinkDao()
+
+    @Provides
+    fun provideAnimeVideoDao(database: AppDatabase): AnimeVideoDao = database.animeVideoDao()
 }

@@ -1,8 +1,17 @@
 package com.lambao.animike.ui.detail
 
+import android.Manifest
+import android.app.DownloadManager
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Environment
 import android.util.Log
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
@@ -72,6 +81,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -80,10 +90,14 @@ import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.AnimeReview
 import com.lambao.animike.domain.model.AnimeThemes
+import com.lambao.animike.domain.model.AnimeVideo
 import com.lambao.animike.domain.model.Episode
+import com.lambao.animike.domain.model.Picture
 import com.lambao.animike.domain.model.RelationGroup
+import com.lambao.animike.domain.model.StreamingLink
 import com.lambao.animike.ui.components.AnimeCard
 import com.lambao.animike.ui.components.BackButton
+import com.lambao.animike.ui.components.ReviewCard
 import com.lambao.animike.ui.theme.Dimens
 import com.lambao.animike.ui.theme.Motion
 import com.lambao.animike.ui.theme.success
@@ -97,10 +111,32 @@ fun DetailScreen(
     onNavigateToEpisodes: (Int) -> Unit,
     onNavigateToCharacters: (Int) -> Unit,
     onNavigateToReviews: (Int) -> Unit,
+    onNavigateToReviewDetail: () -> Unit,
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // WRITE_EXTERNAL_STORAGE là dangerous permission từ API 23 — CHỈ khai
+    // trong Manifest KHÔNG đủ, phải xin runtime. Miễn trừ scoped-storage
+    // (API 29+) áp dụng theo API CỦA THIẾT BỊ đang chạy (không phải targetSdk
+    // của app — app này targetSdk 36 nhưng thiết bị thật chạy API 24-28 vẫn
+    // enforce model cũ) — nên chỉ xin quyền khi SDK_INT nằm trong khoảng
+    // 23..28, còn lại (29+) gọi thẳng downloadPicture(). Không có bước xin
+    // quyền này, nút tải sẽ LUÔN thất bại (không phải hiếm) trên mọi thiết bị
+    // API 24-28 thật — phát hiện qua review, sửa ngay.
+    var pendingDownloadUrl by remember { mutableStateOf<String?>(null) }
+    val requestStoragePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        val url = pendingDownloadUrl
+        pendingDownloadUrl = null
+        if (granted && url != null) {
+            downloadPicture(context, url)
+        } else if (!granted) {
+            Toast.makeText(context, "Cần quyền lưu trữ để tải ảnh xuống", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.effect.collect { effect ->
@@ -114,15 +150,65 @@ fun DetailScreen(
                     }
                 }
 
+                is DetailEffect.OpenExternalUrl -> {
+                    try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, effect.url.toUri()))
+                    } catch (e: ActivityNotFoundException) {
+                        Log.w("DetailScreen", "Không có app nào xử lý được link streaming", e)
+                    }
+                }
+
+                is DetailEffect.DownloadPicture -> {
+                    val needsRuntimePermission = Build.VERSION.SDK_INT in Build.VERSION_CODES.M until Build.VERSION_CODES.Q &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+                        PackageManager.PERMISSION_GRANTED
+                    if (needsRuntimePermission) {
+                        pendingDownloadUrl = effect.url
+                        requestStoragePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    } else {
+                        downloadPicture(context, effect.url)
+                    }
+                }
+
                 is DetailEffect.NavigateToDetail -> onNavigateToDetail(effect.malId)
                 is DetailEffect.NavigateToEpisodes -> onNavigateToEpisodes(effect.malId)
                 is DetailEffect.NavigateToCharacters -> onNavigateToCharacters(effect.malId)
                 is DetailEffect.NavigateToReviews -> onNavigateToReviews(effect.malId)
+                DetailEffect.NavigateToReviewDetail -> onNavigateToReviewDetail()
             }
         }
     }
 
     DetailScreenContent(state = state, onBackClick = onBackClick, onEvent = viewModel::onEvent)
+}
+
+// DownloadManager (không phải tự đọc byte qua Coil rồi ghi MediaStore) — lưu
+// vào thư mục Pictures công khai, có notification tải xong, Photos/Gallery
+// tự quét thấy ảnh mới, đúng kỳ vọng "nút tải xuống" thông thường của user.
+// Quyền WRITE_EXTERNAL_STORAGE (runtime request ở DetailScreen phía trên cho
+// API 23-28, Manifest khai maxSdkVersion=28) đã được đảm bảo trước khi hàm
+// này được gọi. Bắt SecurityException/IllegalArgumentException thay vì
+// catch(Exception) rộng — đây là 2 loại lỗi thực tế có thể xảy ra (quyền bị
+// thu hồi giữa chừng, URL dị dạng), không phải bắt mọi lỗi runtime.
+private fun downloadPicture(context: Context, url: String) {
+    try {
+        val fileName = "AniMike_${System.currentTimeMillis()}.jpg"
+        val request = DownloadManager.Request(url.toUri())
+            .setTitle(fileName)
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_PICTURES, fileName)
+            .setMimeType("image/jpeg")
+            .setAllowedOverMetered(true)
+        val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        downloadManager.enqueue(request)
+        Toast.makeText(context, "Đang tải ảnh xuống...", Toast.LENGTH_SHORT).show()
+    } catch (e: SecurityException) {
+        Log.w("DetailScreen", "Không có quyền tải ảnh xuống", e)
+        Toast.makeText(context, "Không thể tải ảnh xuống", Toast.LENGTH_SHORT).show()
+    } catch (e: IllegalArgumentException) {
+        Log.w("DetailScreen", "URL ảnh không hợp lệ để tải xuống", e)
+        Toast.makeText(context, "Không thể tải ảnh xuống", Toast.LENGTH_SHORT).show()
+    }
 }
 
 // Ngưỡng hiện nút "cuộn lên đầu" — firstVisibleItemIndex tính theo SỐ ITEM
@@ -172,6 +258,10 @@ private fun DetailScreenContent(
                         reviews = state.reviews,
                         pictures = state.pictures,
                         themes = state.themes,
+                        streamingLinks = state.streamingLinks,
+                        // tabVideos: lọc bỏ video trùng với TrailerCard (xem
+                        // comment ở DetailState.tabVideos).
+                        videos = state.tabVideos,
                         listState = listState,
                         onEvent = onEvent,
                     )
@@ -224,7 +314,9 @@ private fun DetailScreenContent(
 @Composable
 private fun TopBar(isFavorite: Boolean, showFavorite: Boolean, onBackClick: () -> Unit, onFavoriteClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(Dimens.SpaceSm),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(Dimens.SpaceSm),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         BackButton(onClick = onBackClick)
@@ -246,8 +338,10 @@ private fun DetailContent(
     recommendations: List<Anime>,
     episodes: List<Episode>,
     reviews: List<AnimeReview>,
-    pictures: List<String>,
+    pictures: List<Picture>,
     themes: AnimeThemes?,
+    streamingLinks: List<StreamingLink>,
+    videos: List<AnimeVideo>,
     listState: LazyListState,
     onEvent: (DetailEvent) -> Unit,
 ) {
@@ -256,6 +350,17 @@ private fun DetailContent(
 
         if (detail.genres.isNotEmpty()) {
             item { GenreChips(genres = detail.genres) }
+        }
+
+        // "Xem trên..." đặt ngay dưới genres, trước trailer — hành động chính
+        // của người muốn XEM phim (khác các section thông tin bên dưới), càng
+        // gần đầu càng dễ thấy; chỉ 1 hàng chip cuộn ngang nên không làm dài
+        // trang thêm đáng kể.
+        item {
+            StreamingLinksRow(
+                links = streamingLinks,
+                onLinkClick = { onEvent(DetailEvent.OnStreamingLinkClick(it)) },
+            )
         }
 
         val trailerYoutubeId = detail.trailerYoutubeId
@@ -289,19 +394,27 @@ private fun DetailContent(
         // "Hình ảnh" đặt sau nhóm thông tin về chính bộ phim (tập/nhân vật/
         // liên quan), trước nhóm khám phá (Đề xuất/Đánh giá/Nhạc phim) — tính
         // năng phát sinh ngoài kit Animax, xem docs/ROADMAP.md MVP3.
-        item { PicturesSection(pictures = pictures) }
+        item {
+            PicturesSection(
+                pictures = pictures,
+                onDownloadClick = { onEvent(DetailEvent.OnDownloadPictureClick(it)) },
+            )
+        }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
         item {
-            // "Nhạc phim" gộp vào tab cùng Đề xuất/Đánh giá (theo yêu cầu user
-            // — Detail vốn đã nhiều section, gộp lại đỡ dài trang). "Thống kê"
-            // ĐÃ CHUYỂN sang màn Đánh giá "Xem tất cả" (ReviewsScreen) — xem
-            // docs/ROADMAP.md.
+            // "Nhạc phim" + "Video" (promo/MV) gộp vào tab cùng Đề xuất/Đánh
+            // giá (theo yêu cầu user — Detail vốn đã nhiều section, gộp lại
+            // đỡ dài trang). "Thống kê" ĐÃ CHUYỂN sang màn Đánh giá "Xem tất
+            // cả" (ReviewsScreen) — xem docs/ROADMAP.md.
             ExploreTabsSection(
                 recommendations = recommendations,
                 reviews = reviews,
                 themes = themes,
+                videos = videos,
                 onRecommendationClick = { onEvent(DetailEvent.OnRecommendationClick(it)) },
                 onSeeAllReviewsClick = { onEvent(DetailEvent.OnSeeAllReviewsClick) },
+                onReviewClick = { onEvent(DetailEvent.OnReviewClick(it)) },
+                onVideoClick = { onEvent(DetailEvent.OnTrailerClick(it)) },
             )
         }
         item { Spacer(Modifier.height(Dimens.SpaceXl)) }
@@ -316,7 +429,9 @@ private fun HeroHeader(detail: AnimeDetail) {
     val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
     val background = MaterialTheme.colorScheme.background
 
-    Box(modifier = Modifier.fillMaxWidth().height(Dimens.HeroHeaderHeight)) {
+    Box(modifier = Modifier
+        .fillMaxWidth()
+        .height(Dimens.HeroHeaderHeight)) {
         AsyncImage(
             model = detail.imageUrl,
             contentDescription = null,
@@ -470,6 +585,54 @@ private fun GenreChips(genres: List<String>) {
     }
 }
 
+// MVP4 nút "Xem trên..." (/anime/{id}/streaming) — 1 hàng chip cuộn ngang mở
+// nền tảng streaming hợp pháp bằng browser ngoài. Chip nền primary-nhạt +
+// chữ primary (khác GenreChips surfaceVariant thuần hiển thị) để báo hiệu
+// đây là hành động bấm được. AnimatedVisibility vì streaming tải SAU detail
+// (cùng lý do CharactersSection).
+@Composable
+private fun StreamingLinksRow(links: List<StreamingLink>, onLinkClick: (String) -> Unit) {
+    AnimatedVisibility(visible = links.isNotEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.ScreenPadding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+        ) {
+            Text(
+                text = "Xem trên:",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            LazyRow(
+                contentPadding = PaddingValues(vertical = Dimens.SpaceSm),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+            ) {
+                items(links, key = { it.url }) { link ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(Dimens.RadiusChip))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                            .clickable(
+                                onClickLabel = "Mở ${link.name}",
+                                role = Role.Button,
+                                onClick = { onLinkClick(link.url) },
+                            )
+                            .padding(horizontal = Dimens.SpaceMd, vertical = Dimens.SpaceXs),
+                    ) {
+                        Text(
+                            text = link.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Thay nút text "Xem trailer" cũ bằng card thumbnail 16:9 + play overlay —
 // vị trí tương ứng nút "Play" pill trong kit (32_Dark_anime episode details):
 // trailer là nội dung video duy nhất app có (Jikan không có video tập phim,
@@ -488,7 +651,11 @@ private fun TrailerCard(thumbnailUrl: String?, onClick: () -> Unit) {
             .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm)
             .aspectRatio(16f / 9f)
             .clip(RoundedCornerShape(Dimens.RadiusCard))
-            .clickable(onClickLabel = "Xem trailer trên YouTube", role = Role.Button, onClick = onClick),
+            .clickable(
+                onClickLabel = "Xem trailer trên YouTube",
+                role = Role.Button,
+                onClick = onClick
+            ),
     ) {
         val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
         val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
@@ -513,7 +680,9 @@ private fun TrailerCard(thumbnailUrl: String?, onClick: () -> Unit) {
         val gradient = remember(background) {
             Brush.verticalGradient(colors = listOf(Color.Transparent, background.copy(alpha = 0.85f)))
         }
-        Box(modifier = Modifier.fillMaxSize().background(gradient))
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .background(gradient))
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
@@ -626,7 +795,9 @@ private fun CharacterItem(character: AnimeCharacter) {
             placeholder = placeholderPainter,
             error = placeholderPainter,
             fallback = placeholderPainter,
-            modifier = Modifier.size(Dimens.AvatarSize).clip(CircleShape),
+            modifier = Modifier
+                .size(Dimens.AvatarSize)
+                .clip(CircleShape),
         )
         Text(
             text = character.name,
@@ -798,6 +969,91 @@ private fun ThemeRow(label: String, text: String) {
     }
 }
 
+// Tab "Video" (MVP4, /anime/{id}/videos: promo/PV + music video) — LazyRow
+// card 16:9 kiểu EpisodeItem nhưng kèm play overlay như TrailerCard (đây là
+// video mở YouTube, không phải thông tin thuần). Bấm card gửi cùng event
+// OnTrailerClick (cùng hành vi "mở 1 video YouTube").
+@Composable
+private fun VideosRow(videos: List<AnimeVideo>, onVideoClick: (String) -> Unit) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
+    ) {
+        items(videos, key = { it.youtubeId }) { video -> VideoCard(video = video, onClick = { onVideoClick(video.youtubeId) }) }
+    }
+}
+
+@Composable
+private fun VideoCard(video: AnimeVideo, onClick: () -> Unit) {
+    val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
+    val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
+    Column(
+        modifier = Modifier
+            .width(Dimens.VideoCardWidth)
+            .clickable(
+                onClickLabel = "Xem ${video.title} trên YouTube",
+                role = Role.Button,
+                onClick = onClick
+            ),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(Dimens.RadiusCard)),
+        ) {
+            AsyncImage(
+                model = video.thumbnailUrl,
+                // Trang trí — hành động đã có onClickLabel + title bên dưới.
+                contentDescription = null,
+                // Crop: thumbnail hqdefault 4:3 kèm letterbox, crop vào khung
+                // 16:9 tự cắt bỏ 2 bar đen (cùng lý do TrailerCard).
+                contentScale = ContentScale.Crop,
+                placeholder = placeholderPainter,
+                error = placeholderPainter,
+                fallback = placeholderPainter,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(Dimens.IconButtonSize)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    // Variation selector — cùng lý do với TrailerCard.
+                    text = "▶︎",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.clearAndSetSemantics {},
+                )
+            }
+        }
+        Text(
+            text = video.title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+            // minLines = maxLines: card cùng chiều cao trong 1 hàng LazyRow —
+            // cùng lý do với EpisodeItem/CharacterItem.
+            minLines = 2,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = Dimens.SpaceXs),
+        )
+        // Luôn render (rỗng nếu là promo không có subtitle) — mọi card cùng
+        // chiều cao, cùng lý do với dòng seiyuu của CharacterItem.
+        Text(
+            text = video.subtitle ?: "",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 // Dùng chung cho Synopsis + từng dòng Relations — thu gọn N dòng + "Xem
 // thêm"/"Thu gọn", nhưng chỉ hiện nút toggle khi text THỰC SỰ tràn quá
 // maxCollapsedLines (onTextLayout + hasVisualOverflow), tránh hiện "Xem thêm"
@@ -833,9 +1089,11 @@ private fun ExpandableText(text: String, modifier: Modifier = Modifier, maxColla
 // Bộ sưu tập ảnh từ /pictures (poster art các thời kỳ) — tính năng phát sinh
 // ngoài kit Animax, không có mockup: LazyRow poster 2:3 (khớp AnimeCard),
 // bấm ảnh mở viewer full-screen vuốt ngang. AnimatedVisibility vì pictures
-// là lệnh gọi phụ cuối cùng, "mọc" ra sau khi detail đã hiển thị.
+// là lệnh gọi phụ cuối cùng, "mọc" ra sau khi detail đã hiển thị. Grid dùng
+// thumbnailUrl (nhỏ hơn) — viewer full-screen mới dùng fullUrl (nét nhất),
+// xem domain.model.Picture.
 @Composable
-private fun PicturesSection(pictures: List<String>) {
+private fun PicturesSection(pictures: List<Picture>, onDownloadClick: (String) -> Unit) {
     // Index ảnh đang mở trong viewer, null = viewer đóng — state thuần UI
     // (giống expanded của ExpandableText), không cần đưa vào DetailState.
     // rememberSaveable: giữ viewer mở đúng ảnh khi xoay màn hình. Đặt NGOÀI
@@ -849,11 +1107,11 @@ private fun PicturesSection(pictures: List<String>) {
                 contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
                 horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
             ) {
-                itemsIndexed(pictures, key = { _, url -> url }) { index, url ->
+                itemsIndexed(pictures, key = { _, picture -> picture.fullUrl }) { index, picture ->
                     val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
                     val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
                     AsyncImage(
-                        model = url,
+                        model = picture.thumbnailUrl,
                         contentDescription = "Ảnh ${index + 1}",
                         contentScale = ContentScale.Crop,
                         placeholder = placeholderPainter,
@@ -879,12 +1137,18 @@ private fun PicturesSection(pictures: List<String>) {
             pictures = pictures,
             initialPage = index.coerceIn(0, pictures.lastIndex),
             onDismiss = { viewerIndex = null },
+            onDownloadClick = onDownloadClick,
         )
     }
 }
 
 @Composable
-private fun PictureViewerDialog(pictures: List<String>, initialPage: Int, onDismiss: () -> Unit) {
+private fun PictureViewerDialog(
+    pictures: List<Picture>,
+    initialPage: Int,
+    onDismiss: () -> Unit,
+    onDownloadClick: (String) -> Unit,
+) {
     // usePlatformDefaultWidth = false: dialog chiếm trọn màn hình cho viewer
     // ảnh, thay vì bị bó trong khung dialog mặc định.
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -902,10 +1166,13 @@ private fun PictureViewerDialog(pictures: List<String>, initialPage: Int, onDism
                 // Preload trang kề: ảnh large nặng, không preload thì mỗi lần
                 // vuốt user phải nhìn placeholder chờ tải từ đầu.
                 beyondViewportPageCount = 1,
-                key = { pictures[it] },
+                key = { pictures[it].fullUrl },
             ) { page ->
                 AsyncImage(
-                    model = pictures[page],
+                    // fullUrl (large_image_url ưu tiên) — viewer LUÔN hiện
+                    // đúng bản nét nhất, theo yêu cầu user (khác grid dùng
+                    // thumbnailUrl nhỏ hơn phía trên).
+                    model = pictures[page].fullUrl,
                     contentDescription = "Ảnh ${page + 1}",
                     // Fit (không Crop): viewer phải thấy TRỌN ảnh gốc, đây là
                     // mục đích của việc phóng to.
@@ -918,7 +1185,29 @@ private fun PictureViewerDialog(pictures: List<String>, initialPage: Int, onDism
                 )
             }
 
-            // Nút đóng — cùng ngôn ngữ hình ảnh với BackButton (tròn, nền mờ).
+            // Toolbar trên cùng: tải xuống (start) + đóng (end) — bố cục
+            // chuẩn "back 1 bên, action 1 bên" quen thuộc của trình xem ảnh
+            // (Google Photos...), cùng ngôn ngữ hình ảnh (tròn, nền mờ) với
+            // BackButton.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(Dimens.SpaceSm)
+                    .size(Dimens.IconButtonSize)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
+                    .clickable(onClick = { onDownloadClick(pictures[pagerState.currentPage].fullUrl) })
+                    .semantics { contentDescription = "Tải ảnh xuống" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "⬇",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.clearAndSetSemantics {},
+                )
+            }
+
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -954,16 +1243,17 @@ private fun PictureViewerDialog(pictures: List<String>, initialPage: Int, onDism
 
 // Kit Animax: tab "More Like This" / "Comments" (underline indicator). Ở đây
 // đổi tên "Comments" thành "Đánh giá" vì Jikan chỉ có reviews MAL, không có
-// bình luận thời gian thực. Thêm "Nhạc phim" làm tab thứ 3 (MVP4, theo yêu
-// cầu user — gộp vào đây thay vì đứng riêng để đỡ dài Detail). Chỉ hiện
-// TabRow khi ≥2 tab có dữ liệu — nếu chỉ 1 tab có, hiện thẳng section đó
-// (không cần tab để chọn 1 lựa chọn duy nhất); nếu cả 3 đều rỗng, ẩn hẳn.
-private enum class DetailTab { RECOMMENDATIONS, REVIEWS, THEMES }
+// bình luận thời gian thực. Thêm "Nhạc phim" (tab 3) + "Video" (tab 4 — MVP4
+// promo/PV + music video, cùng lý do gộp: đỡ dài Detail). Chỉ hiện TabRow
+// khi ≥2 tab có dữ liệu — nếu chỉ 1 tab có, hiện thẳng section đó (không cần
+// tab để chọn 1 lựa chọn duy nhất); nếu tất cả đều rỗng, ẩn hẳn.
+private enum class DetailTab { RECOMMENDATIONS, REVIEWS, THEMES, VIDEOS }
 
 private fun detailTabLabel(tab: DetailTab): String = when (tab) {
     DetailTab.RECOMMENDATIONS -> "Đề xuất"
     DetailTab.REVIEWS -> "Đánh giá"
     DetailTab.THEMES -> "Nhạc phim"
+    DetailTab.VIDEOS -> "Video"
 }
 
 @Composable
@@ -971,17 +1261,21 @@ private fun ExploreTabsSection(
     recommendations: List<Anime>,
     reviews: List<AnimeReview>,
     themes: AnimeThemes?,
+    videos: List<AnimeVideo>,
     onRecommendationClick: (Int) -> Unit,
     onSeeAllReviewsClick: () -> Unit,
+    onReviewClick: (AnimeReview) -> Unit,
+    onVideoClick: (String) -> Unit,
 ) {
     val themeEntries = remember(themes) { buildThemeEntries(themes) }
     // buildList: chỉ liệt kê tab THỰC SỰ có data — khác bản 2 tab cũ (so sánh
     // cứng 2 điều kiện), giờ tổng quát cho N tab để dễ mở rộng sau này.
-    val availableTabs = remember(recommendations, reviews, themeEntries) {
+    val availableTabs = remember(recommendations, reviews, themeEntries, videos) {
         buildList {
             if (recommendations.isNotEmpty()) add(DetailTab.RECOMMENDATIONS)
             if (reviews.isNotEmpty()) add(DetailTab.REVIEWS)
             if (themeEntries.isNotEmpty()) add(DetailTab.THEMES)
+            if (videos.isNotEmpty()) add(DetailTab.VIDEOS)
         }
     }
     // AnimatedVisibility thay vì early return khi cả 3 đều rỗng — cùng lý do
@@ -1020,8 +1314,9 @@ private fun ExploreTabsSection(
                     ) { tab ->
                         when (tab) {
                             DetailTab.RECOMMENDATIONS -> RecommendationsRow(recommendations, onRecommendationClick)
-                            DetailTab.REVIEWS -> ReviewsList(reviews, onSeeAllReviewsClick)
+                            DetailTab.REVIEWS -> ReviewsList(reviews, onReviewClick, onSeeAllReviewsClick)
                             DetailTab.THEMES -> ThemesList(themeEntries)
+                            DetailTab.VIDEOS -> VideosRow(videos, onVideoClick)
                         }
                     }
                 }
@@ -1030,19 +1325,20 @@ private fun ExploreTabsSection(
             availableTabs.size == 1 -> Column {
                 val onlyTab = availableTabs.first()
                 SectionTitle(
-                    when (onlyTab) {
-                        DetailTab.RECOMMENDATIONS -> "Đề xuất tương tự"
-                        DetailTab.REVIEWS -> "Đánh giá"
-                        DetailTab.THEMES -> "Nhạc phim"
-                    },
+                    // Chỉ RECOMMENDATIONS cần tiêu đề khác nhãn tab ("Đề xuất
+                    // tương tự" đầy đủ nghĩa hơn khi đứng 1 mình) — còn lại
+                    // dùng lại detailTabLabel, tránh duplicate chuỗi (phát
+                    // hiện qua review, sửa).
+                    if (onlyTab == DetailTab.RECOMMENDATIONS) "Đề xuất tương tự" else detailTabLabel(onlyTab),
                 )
                 when (onlyTab) {
                     DetailTab.RECOMMENDATIONS -> RecommendationsRow(recommendations, onRecommendationClick)
-                    DetailTab.REVIEWS -> ReviewsList(reviews, onSeeAllReviewsClick)
+                    DetailTab.REVIEWS -> ReviewsList(reviews, onReviewClick, onSeeAllReviewsClick)
                     DetailTab.THEMES -> ThemesList(themeEntries)
+                    DetailTab.VIDEOS -> VideosRow(videos, onVideoClick)
                 }
             }
-            // Cả 3 đều rỗng: AnimatedVisibility(visible=false) đã lo phần ẩn,
+            // Tất cả đều rỗng: AnimatedVisibility(visible=false) đã lo phần ẩn,
             // nhánh này chỉ để tường minh chứ không có gì phải render.
             else -> Unit
         }
@@ -1107,13 +1403,18 @@ private fun RecommendationsRow(recommendations: List<Anime>, onClick: (Int) -> U
 // reviews đã bị giới hạn số lượng ở AnimeDetailRepository.getReviews() (chỉ
 // preview) — luôn hiện "Xem tất cả" vì preview luôn bị cắt, khả năng còn thêm
 // review khác qua ReviewsScreen (Paging 3) là gần như chắc chắn.
+// Dùng chung ReviewCard với ReviewsScreen (theo yêu cầu user: đồng bộ hiển
+// thị) — bấm 1 card mở ReviewDetailScreen xem đầy đủ, cùng hành vi click ở
+// ReviewsScreen (xem DetailContract.OnReviewClick).
 @Composable
-private fun ReviewsList(reviews: List<AnimeReview>, onSeeAllClick: () -> Unit) {
+private fun ReviewsList(reviews: List<AnimeReview>, onReviewClick: (AnimeReview) -> Unit, onSeeAllClick: () -> Unit) {
     Column(
         modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
         verticalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
     ) {
-        reviews.forEach { review -> ReviewCard(review) }
+        reviews.forEach { review ->
+            key(review.id) { ReviewCard(review = review, onClick = { onReviewClick(review) }) }
+        }
         // "Xem tất cả" đặt DƯỚI danh sách (khác các section LazyRow ngang có
         // nút ở header) — với list dọc, đọc hết preview rồi mới tới lời mời
         // xem thêm thuận mắt hơn.
@@ -1127,46 +1428,6 @@ private fun ReviewsList(reviews: List<AnimeReview>, onSeeAllClick: () -> Unit) {
                     .padding(Dimens.SpaceXs),
             )
         }
-    }
-}
-
-@Composable
-private fun ReviewCard(review: AnimeReview) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Dimens.RadiusCard))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(Dimens.SpaceMd),
-        verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = review.username,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (review.score != null) {
-                Text(
-                    text = "★ ${review.score}/10",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
-                )
-            }
-        }
-        Text(
-            text = review.reviewText,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 4,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 

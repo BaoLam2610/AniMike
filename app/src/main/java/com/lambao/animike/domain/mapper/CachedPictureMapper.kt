@@ -1,8 +1,9 @@
 package com.lambao.animike.domain.mapper
 
 import com.lambao.animike.data.local.entity.CachedPictureEntity
+import com.lambao.animike.domain.model.Picture
 
-fun CachedPictureEntity.toDomain(): String = url
+fun CachedPictureEntity.toDomain(): Picture = Picture(thumbnailUrl = thumbnailUrl, fullUrl = fullUrl)
 
-fun String.toPictureEntity(malId: Int, position: Int, fetchedAt: Long): CachedPictureEntity =
-    CachedPictureEntity(malId = malId, url = this, position = position, fetchedAt = fetchedAt)
+fun Picture.toEntity(malId: Int, position: Int, fetchedAt: Long): CachedPictureEntity =
+    CachedPictureEntity(malId = malId, thumbnailUrl = thumbnailUrl, fullUrl = fullUrl, position = position, fetchedAt = fetchedAt)
