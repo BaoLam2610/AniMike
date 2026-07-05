@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -59,6 +60,7 @@ import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeListSource
 import com.lambao.animike.ui.components.AnimeCard
 import com.lambao.animike.ui.components.AnimeCardPlaceholder
+import com.lambao.animike.ui.components.CommunityRecommendationCard
 import com.lambao.animike.ui.components.NewEpisodeCard
 import com.lambao.animike.ui.components.rememberShimmerProgress
 import com.lambao.animike.ui.components.shimmerEffect
@@ -82,6 +84,7 @@ fun HomeScreen(
     onNavigateToDetail: (Int) -> Unit,
     onNavigateToAnimeList: (AnimeListSource) -> Unit,
     onNavigateToNewEpisodes: () -> Unit,
+    onNavigateToCommunityRecommendations: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -93,6 +96,7 @@ fun HomeScreen(
                 HomeEffect.NavigateToTopAnime -> onNavigateToAnimeList(AnimeListSource.TOP)
                 HomeEffect.NavigateToUpcoming -> onNavigateToAnimeList(AnimeListSource.UPCOMING)
                 HomeEffect.NavigateToNewEpisodes -> onNavigateToNewEpisodes()
+                HomeEffect.NavigateToCommunityRecommendations -> onNavigateToCommunityRecommendations()
             }
         }
     }
@@ -191,6 +195,14 @@ private fun HomeScreenContent(
                             onRetry = { onEvent(HomeEvent.OnRetryNewEpisodes) },
                             onAnimeClick = { onEvent(HomeEvent.OnAnimeClick(it)) },
                             onSeeAllClick = { onEvent(HomeEvent.OnSeeAllNewEpisodesClick) },
+                        )
+                    }
+                    item {
+                        CommunityRecommendationsSection(
+                            section = state.communityRecommendations,
+                            onRetry = { onEvent(HomeEvent.OnRetryCommunityRecommendations) },
+                            onAnimeClick = { onEvent(HomeEvent.OnAnimeClick(it)) },
+                            onSeeAllClick = { onEvent(HomeEvent.OnSeeAllCommunityRecommendationsClick) },
                         )
                     }
                 }
@@ -601,6 +613,88 @@ private fun NewEpisodesSection(
                         AnimeCardPlaceholder(
                             progress = shimmerProgress,
                             modifier = Modifier.width(Dimens.CardWidth),
+                        )
+                    }
+                }
+            }
+
+            section.error != null -> SectionError(message = section.error, onRetry = onRetry)
+
+            else -> Text(
+                text = "Chưa có dữ liệu",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+            )
+        }
+    }
+}
+
+// MVP4 "Đề xuất cộng đồng" — cùng cấu trúc header/preview/loading/error với
+// AnimeSection/NewEpisodesSection, khác kiểu dữ liệu (CommunityRecommendation
+// ghép cặp 2 anime) nên tách composable riêng.
+@Composable
+private fun CommunityRecommendationsSection(
+    section: CommunityRecommendationSectionState,
+    onRetry: () -> Unit,
+    onAnimeClick: (Int) -> Unit,
+    onSeeAllClick: () -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.ScreenPadding),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Đề xuất cộng đồng",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f),
+            )
+            // Cùng điều kiện với AnimeSection/NewEpisodesSection — preview vẫn
+            // fetch tối đa 100 item/trang (chỉ take(10) để hiển thị) nên check
+            // size > SECTION_PREVIEW_LIMIT vẫn đúng, tránh mời bấm "Xem tất cả"
+            // lúc đang loading/lỗi/rỗng thật.
+            if (section.recommendations.size > SECTION_PREVIEW_LIMIT) {
+                Text(
+                    text = "Xem tất cả",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable(onClick = onSeeAllClick)
+                        .padding(Dimens.SpaceXs),
+                )
+            }
+        }
+        when {
+            section.recommendations.isNotEmpty() -> LazyRow(
+                contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
+            ) {
+                items(section.recommendations.take(SECTION_PREVIEW_LIMIT), key = { it.id }) { recommendation ->
+                    CommunityRecommendationCard(
+                        recommendation = recommendation,
+                        onAnimeClick = onAnimeClick,
+                        modifier = Modifier.width(Dimens.CommunityRecommendationCardWidth),
+                    )
+                }
+            }
+
+            section.isLoading -> {
+                val shimmerProgress = rememberShimmerProgress()
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
+                ) {
+                    items(4, key = { it }) {
+                        Box(
+                            modifier = Modifier
+                                .width(Dimens.CommunityRecommendationCardWidth)
+                                .aspectRatio(1f)
+                                .clip(RoundedCornerShape(Dimens.RadiusCard))
+                                .shimmerEffect(shimmerProgress),
                         )
                     }
                 }

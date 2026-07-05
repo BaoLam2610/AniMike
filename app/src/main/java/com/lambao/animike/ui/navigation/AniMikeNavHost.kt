@@ -30,6 +30,7 @@ import androidx.navigation.navArgument
 import com.lambao.animike.ui.animelist.AnimeListScreen
 import com.lambao.animike.ui.browse.BrowseScreen
 import com.lambao.animike.ui.characters.CharactersScreen
+import com.lambao.animike.ui.communityrecommendations.CommunityRecommendationsScreen
 import com.lambao.animike.ui.detail.DetailScreen
 import com.lambao.animike.ui.episodes.EpisodesScreen
 import com.lambao.animike.ui.favorites.FavoritesScreen
@@ -191,6 +192,9 @@ fun AniMikeNavHost() {
                     onNavigateToDetail = { malId -> navController.navigate(Routes.detail(malId)) },
                     onNavigateToAnimeList = { source -> navController.navigate(Routes.animeList(source)) },
                     onNavigateToNewEpisodes = { navController.navigate(Routes.NEW_EPISODES) },
+                    onNavigateToCommunityRecommendations = {
+                        navController.navigate(Routes.COMMUNITY_RECOMMENDATIONS)
+                    },
                 )
             }
             composable(
@@ -205,6 +209,12 @@ fun AniMikeNavHost() {
             }
             composable(Routes.NEW_EPISODES) {
                 NewEpisodesScreen(
+                    onBackClick = navController::popBackStack,
+                    onNavigateToDetail = { malId -> navController.navigate(Routes.detail(malId)) },
+                )
+            }
+            composable(Routes.COMMUNITY_RECOMMENDATIONS) {
+                CommunityRecommendationsScreen(
                     onBackClick = navController::popBackStack,
                     onNavigateToDetail = { malId -> navController.navigate(Routes.detail(malId)) },
                 )

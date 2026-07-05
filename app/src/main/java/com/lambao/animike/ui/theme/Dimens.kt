@@ -41,4 +41,8 @@ object Dimens {
 
     // Home hero slider — chấm chỉ báo trang (page indicator dot)
     val PagerDotSize = 8.dp
+
+    // "Đề xuất cộng đồng" (MVP4) — card rộng hơn AnimeCard vì chứa 2 poster
+    // ghép cặp cạnh nhau + đoạn lý do bên dưới.
+    val CommunityRecommendationCardWidth = 240.dp
 }

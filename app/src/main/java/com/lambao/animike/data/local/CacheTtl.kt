@@ -17,6 +17,11 @@ object CacheTtl {
     const val PICTURES_MS = 7 * 24 * 60 * 60 * 1000L
     const val CHARACTERS_MS = 7 * 24 * 60 * 60 * 1000L
     const val REVIEWS_PREVIEW_MS = 24 * 60 * 60 * 1000L
+
+    // MVP4 "Đề xuất cộng đồng" (Home preview, /recommendations/anime) — user
+    // MAL đăng liên tục như Reviews nên TTL ngắn giống REVIEWS_PREVIEW_MS,
+    // không dài như Recommendations/Pictures/Characters (vốn gần như tĩnh).
+    const val COMMUNITY_RECOMMENDATIONS_MS = 24 * 60 * 60 * 1000L
 }
 
 fun isExpired(fetchedAt: Long, ttlMs: Long, now: Long = System.currentTimeMillis()): Boolean {

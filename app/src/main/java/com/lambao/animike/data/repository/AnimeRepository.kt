@@ -5,6 +5,7 @@ import androidx.paging.PagingSource
 import com.lambao.animike.data.local.CacheTtl
 import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
+import com.lambao.animike.data.local.dao.CommunityRecommendationDao
 import com.lambao.animike.data.local.dao.NewEpisodeDao
 import com.lambao.animike.data.local.entity.AnimeListKey
 import com.lambao.animike.data.local.isExpired
@@ -16,6 +17,7 @@ import com.lambao.animike.domain.mapper.toEntity
 import com.lambao.animike.domain.mapper.toListEntity
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeListSource
+import com.lambao.animike.domain.model.CommunityRecommendation
 import com.lambao.animike.domain.model.NewEpisodeRelease
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -44,6 +46,13 @@ interface AnimeRepository {
     // khác, 1 feed toàn cục (không cần listKey riêng theo instance).
     fun observeNewEpisodeReleases(): Flow<List<NewEpisodeRelease>>
     suspend fun refreshNewEpisodeReleases(force: Boolean = false): ApiResult<Unit>
+
+    // MVP4 "Đề xuất cộng đồng" (/recommendations/anime) — preview Home dùng SWR
+    // Room (TTL ngắn, giống Reviews vì user đăng liên tục), "Xem tất cả" dùng
+    // Paging 3 riêng (endpoint có phân trang THẬT, khác /watch/episodes*).
+    fun observeCommunityRecommendations(): Flow<List<CommunityRecommendation>>
+    suspend fun refreshCommunityRecommendations(force: Boolean = false): ApiResult<Unit>
+    fun communityRecommendationsPagingSource(): PagingSource<Int, CommunityRecommendation>
 }
 
 class AnimeRepositoryImpl @Inject constructor(
@@ -51,6 +60,7 @@ class AnimeRepositoryImpl @Inject constructor(
     private val dao: AnimeListDao,
     private val animeDetailDao: AnimeDetailDao,
     private val newEpisodeDao: NewEpisodeDao,
+    private val communityRecommendationDao: CommunityRecommendationDao,
 ) : AnimeRepository {
 
     override fun observeSeasonNow(): Flow<List<Anime>> = observeList(AnimeListKey.SEASON_NOW)
@@ -105,6 +115,32 @@ class AnimeRepositoryImpl @Inject constructor(
             newEpisodeDao.replaceAll(entities)
         }
     }
+
+    override fun observeCommunityRecommendations(): Flow<List<CommunityRecommendation>> =
+        communityRecommendationDao.observeAll().map { entities -> entities.map { it.toDomain() } }
+
+    override suspend fun refreshCommunityRecommendations(force: Boolean): ApiResult<Unit> {
+        if (!force) {
+            val fetchedAt = communityRecommendationDao.getFetchedAt()
+            if (fetchedAt != null && !isExpired(fetchedAt, CacheTtl.COMMUNITY_RECOMMENDATIONS_MS)) {
+                return ApiResult.Success(Unit)
+            }
+        }
+        return safeApiCall {
+            // Chỉ lấy page 1 cho preview Home (giống New Episodes) — "Xem tất
+            // cả" dùng communityRecommendationsPagingSource() phân trang riêng,
+            // không liên quan cache Room ở đây.
+            val recommendations = api.getCommunityRecommendations(page = 1).data
+                .mapNotNull { it.toDomain() }
+                .distinctBy { it.id }
+            val fetchedAt = System.currentTimeMillis()
+            val entities = recommendations.mapIndexed { index, item -> item.toEntity(index, fetchedAt) }
+            communityRecommendationDao.replaceAll(entities)
+        }
+    }
+
+    override fun communityRecommendationsPagingSource(): PagingSource<Int, CommunityRecommendation> =
+        CommunityRecommendationsPagingSource(api)
 
     private fun observeList(listKey: String): Flow<List<Anime>> =
         dao.observeList(listKey).map { entities -> entities.map { it.toDomain() } }

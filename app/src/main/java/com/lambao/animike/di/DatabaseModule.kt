@@ -6,6 +6,7 @@ import com.lambao.animike.data.local.AppDatabase
 import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
 import com.lambao.animike.data.local.dao.CharacterDao
+import com.lambao.animike.data.local.dao.CommunityRecommendationDao
 import com.lambao.animike.data.local.dao.FavoriteDao
 import com.lambao.animike.data.local.dao.GenreDao
 import com.lambao.animike.data.local.dao.NewEpisodeDao
@@ -61,4 +62,8 @@ object DatabaseModule {
 
     @Provides
     fun provideCharacterDao(database: AppDatabase): CharacterDao = database.characterDao()
+
+    @Provides
+    fun provideCommunityRecommendationDao(database: AppDatabase): CommunityRecommendationDao =
+        database.communityRecommendationDao()
 }

@@ -9,6 +9,7 @@ import com.lambao.animike.data.remote.dto.ImagesDto
 import com.lambao.animike.data.remote.dto.JikanListResponse
 import com.lambao.animike.data.remote.dto.JikanResponse
 import com.lambao.animike.data.remote.dto.RecommendationEntryDto
+import com.lambao.animike.data.remote.dto.RecommendationPairDto
 import com.lambao.animike.data.remote.dto.ReviewDto
 import com.lambao.animike.data.remote.dto.SeasonYearDto
 import com.lambao.animike.data.remote.dto.WatchEpisodeEntryDto
@@ -99,4 +100,10 @@ interface JikanApi {
         @Query("filter") day: String,
         @Query("page") page: Int = 1,
     ): JikanListResponse<AnimeDto>
+
+    // MVP4 "Đề xuất cộng đồng" — feed toàn cục (không theo malId riêng), phân
+    // trang THẬT (100 item/trang) — verify qua curl: page=1/page=2 trả data
+    // khác nhau (khác /watch/episodes* vốn luôn 1 snapshot cố định).
+    @GET("recommendations/anime")
+    suspend fun getCommunityRecommendations(@Query("page") page: Int = 1): JikanListResponse<RecommendationPairDto>
 }

@@ -99,11 +99,22 @@ Cache tự quản trong Room là tầng duy nhất. Server Jikan tự cache ~24h
 | detail full (`/anime/{id}/full`) | 24h |
 | Characters, Recommendations, Pictures (Detail) | 7 ngày, Room SWR (gần như tĩnh) |
 | Reviews preview (Detail, page 1) | 24h (user đăng liên tục) |
+| Community recommendations preview (Home, `/recommendations/anime`) | 24h, Room SWR (user MAL đăng liên tục, giống Reviews) |
 | Episodes preview (Detail, "Các tập") | KHÔNG cache — luôn gọi lại vì tập mới có thể ra bất cứ lúc nào |
 | Search | KHÔNG cache (trừ Paging RemoteMediator sau này) |
 
 ## Test nhanh endpoint
 
+Máy dev KHÔNG có `python3`/`node` thật (chỉ có stub Windows Store báo "not
+found") — dùng `curl` lấy response rồi parse bằng PowerShell
+`ConvertFrom-Json` thay vì `python3 -m json.tool`:
+
 ```bash
-curl -s "https://api.jikan.moe/v4/seasons/now?limit=3" | python3 -m json.tool | head -50
+curl -s "https://api.jikan.moe/v4/seasons/now?limit=3" -o "$HOME/tmp.json"
+```
+
+```powershell
+$j = Get-Content "$HOME\tmp.json" -Raw | ConvertFrom-Json
+$j.pagination
+$j.data[0] | ConvertTo-Json -Depth 5
 ```

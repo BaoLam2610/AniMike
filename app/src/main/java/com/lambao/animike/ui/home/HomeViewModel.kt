@@ -29,6 +29,7 @@ class HomeViewModel @Inject constructor(
     private var topAnimeJob: Job? = null
     private var upcomingJob: Job? = null
     private var newEpisodesJob: Job? = null
+    private var communityRecommendationsJob: Job? = null
 
     // Guard double-tap theo TỪNG anime — hero giờ là slider nhiều trang, dùng
     // 1 job chung sẽ drop nhầm tap hợp lệ trên trang khác khi user vuốt nhanh.
@@ -46,6 +47,7 @@ class HomeViewModel @Inject constructor(
             refreshTopAnime()
             refreshUpcoming()
             refreshNewEpisodes()
+            refreshCommunityRecommendations()
         }
     }
 
@@ -85,7 +87,8 @@ class HomeViewModel @Inject constructor(
                 val previousTopAnime = topAnimeJob
                 val previousUpcoming = upcomingJob
                 val previousNewEpisodes = newEpisodesJob
-                // Gán cùng 1 job cho cả 4 biến — nếu user bấm "Thử lại" riêng 1
+                val previousCommunityRecommendations = communityRecommendationsJob
+                // Gán cùng 1 job cho cả 5 biến — nếu user bấm "Thử lại" riêng 1
                 // section trong lúc pull-to-refresh đang chạy, cancelAndJoin sẽ
                 // nhắm đúng job đang chạy thật thay vì job cũ đã xong.
                 val refreshJob = viewModelScope.launch {
@@ -94,16 +97,19 @@ class HomeViewModel @Inject constructor(
                     previousTopAnime?.cancelAndJoin()
                     previousUpcoming?.cancelAndJoin()
                     previousNewEpisodes?.cancelAndJoin()
+                    previousCommunityRecommendations?.cancelAndJoin()
                     refreshSeasonNow(force = true)
                     refreshTopAnime(force = true)
                     refreshUpcoming(force = true)
                     refreshNewEpisodes(force = true)
+                    refreshCommunityRecommendations(force = true)
                     setState { copy(isRefreshing = false) }
                 }
                 seasonNowJob = refreshJob
                 topAnimeJob = refreshJob
                 upcomingJob = refreshJob
                 newEpisodesJob = refreshJob
+                communityRecommendationsJob = refreshJob
             }
 
             is HomeEvent.OnHeroFavoriteClick -> {
@@ -151,6 +157,17 @@ class HomeViewModel @Inject constructor(
             }
 
             HomeEvent.OnSeeAllNewEpisodesClick -> sendEffect(HomeEffect.NavigateToNewEpisodes)
+
+            HomeEvent.OnRetryCommunityRecommendations -> {
+                val previous = communityRecommendationsJob
+                communityRecommendationsJob = viewModelScope.launch {
+                    previous?.cancelAndJoin()
+                    refreshCommunityRecommendations(force = true)
+                }
+            }
+
+            HomeEvent.OnSeeAllCommunityRecommendationsClick ->
+                sendEffect(HomeEffect.NavigateToCommunityRecommendations)
         }
     }
 
@@ -173,6 +190,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             repository.observeNewEpisodeReleases().collect { list ->
                 setState { copy(newEpisodes = newEpisodes.copy(releases = list)) }
+            }
+        }
+        viewModelScope.launch {
+            repository.observeCommunityRecommendations().collect { list ->
+                setState { copy(communityRecommendations = communityRecommendations.copy(recommendations = list)) }
             }
         }
     }
@@ -231,6 +253,25 @@ class HomeViewModel @Inject constructor(
                 is ApiResult.Success -> setState { copy(newEpisodes = newEpisodes.copy(isLoading = false)) }
                 is ApiResult.Error -> setState {
                     copy(newEpisodes = newEpisodes.copy(isLoading = false, error = result.error.toUserMessage()))
+                }
+            }
+        }
+    }
+
+    private suspend fun refreshCommunityRecommendations(force: Boolean = false) {
+        setState { copy(communityRecommendations = communityRecommendations.copy(isLoading = true, error = null)) }
+        loadMutex.withLock {
+            when (val result = repository.refreshCommunityRecommendations(force)) {
+                is ApiResult.Success -> setState {
+                    copy(communityRecommendations = communityRecommendations.copy(isLoading = false))
+                }
+                is ApiResult.Error -> setState {
+                    copy(
+                        communityRecommendations = communityRecommendations.copy(
+                            isLoading = false,
+                            error = result.error.toUserMessage(),
+                        ),
+                    )
                 }
             }
         }

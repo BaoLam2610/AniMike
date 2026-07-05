@@ -25,6 +25,8 @@ object Routes {
     const val ANIME_LIST_ARG_SOURCE = "source"
     // "Xem tất cả" của "Tập mới phát hành" (MVP4) — không có arg, 1 feed toàn cục.
     const val NEW_EPISODES = "newEpisodes"
+    // "Xem tất cả" của "Đề xuất cộng đồng" (MVP4) — không có arg, Paging 3 riêng.
+    const val COMMUNITY_RECOMMENDATIONS = "communityRecommendations"
 
     fun detail(malId: Int) = "detail/$malId"
     fun episodes(malId: Int) = "episodes/$malId"

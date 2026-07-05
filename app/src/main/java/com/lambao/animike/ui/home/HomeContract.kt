@@ -2,6 +2,7 @@ package com.lambao.animike.ui.home
 
 import androidx.compose.runtime.Immutable
 import com.lambao.animike.domain.model.Anime
+import com.lambao.animike.domain.model.CommunityRecommendation
 import com.lambao.animike.domain.model.NewEpisodeRelease
 
 @Immutable
@@ -18,6 +19,16 @@ data class SectionState(
 data class NewEpisodeSectionState(
     val isLoading: Boolean = true,
     val releases: List<NewEpisodeRelease> = emptyList(),
+    val error: String? = null,
+)
+
+// Cùng lý do với NewEpisodeSectionState — CommunityRecommendation khác shape
+// Anime (2 anime ghép cặp + content + username) nên tách state riêng thay vì
+// tái dùng SectionState.
+@Immutable
+data class CommunityRecommendationSectionState(
+    val isLoading: Boolean = true,
+    val recommendations: List<CommunityRecommendation> = emptyList(),
     val error: String? = null,
 )
 
@@ -39,6 +50,8 @@ data class HomeState(
     val randomAnimeError: String? = null,
     // MVP4 "Tập mới phát hành" (kit Animax "New Episode Releases").
     val newEpisodes: NewEpisodeSectionState = NewEpisodeSectionState(),
+    // MVP4 "Đề xuất cộng đồng" (/recommendations/anime).
+    val communityRecommendations: CommunityRecommendationSectionState = CommunityRecommendationSectionState(),
 )
 
 sealed interface HomeEvent {
@@ -53,6 +66,8 @@ sealed interface HomeEvent {
     data object OnRandomAnimeClick : HomeEvent
     data object OnRetryNewEpisodes : HomeEvent
     data object OnSeeAllNewEpisodesClick : HomeEvent
+    data object OnRetryCommunityRecommendations : HomeEvent
+    data object OnSeeAllCommunityRecommendationsClick : HomeEvent
 }
 
 sealed interface HomeEffect {
@@ -60,4 +75,5 @@ sealed interface HomeEffect {
     data object NavigateToTopAnime : HomeEffect
     data object NavigateToUpcoming : HomeEffect
     data object NavigateToNewEpisodes : HomeEffect
+    data object NavigateToCommunityRecommendations : HomeEffect
 }

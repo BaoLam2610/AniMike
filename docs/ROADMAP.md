@@ -268,7 +268,24 @@ nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`)
   `NewEpisodeCard` gán `contentDescription` = tên anime + nhãn tập trên ảnh
   (không chỉ hiện "Episode N" — nhiều bìa không có logo/tên đọc được như ảnh
   mẫu trong kit) — phát hiện qua review, sửa ngay.
-- [ ] Đề xuất cộng đồng (`/recommendations/anime`)
+- [x] **Đề xuất cộng đồng** ✅ — section "Đề xuất cộng đồng" trên Home (không
+  có mockup nên tự thiết kế theo token animike-design), mỗi item ghép cặp 2
+  anime (mỗi ảnh bấm riêng mở đúng Detail của anime đó) kèm lý do do user MAL
+  viết + username. Verify qua curl: `mal_id` là chuỗi ghép dạng `"30-51552"`
+  (không phải Int như list khác), `entry` LUÔN có đúng 2 phần tử, và — KHÁC
+  `/watch/episodes*` — endpoint này phân trang THẬT (100 item/trang, `page=1`/
+  `page=2` trả data khác nhau, 20 trang). Preview Home dùng SWR + Room cache
+  riêng (`cached_community_recommendation`, TTL 24h giống Reviews vì user
+  đăng liên tục — không dài như Recommendations/Pictures/Characters vốn gần
+  như tĩnh); "Xem tất cả" (`CommunityRecommendationsScreen`, package
+  `ui/communityrecommendations`) dùng Paging 3 riêng
+  (`CommunityRecommendationsPagingSource`, page size 100), không liên quan
+  cache Room preview. Card dùng chung (`CommunityRecommendationCard`) cho cả
+  Home preview lẫn "Xem tất cả", tham số `contentMaxLines` khác nhau vì
+  width cố định (LazyRow) so với fillMaxWidth (LazyColumn) có chỗ dọc khác
+  nhau. Đã cân nhắc `/anime/{id}/recommendations` (đã dùng ở Detail) nhưng đó
+  là recommendation THEO 1 anime cụ thể (1 entry, có context sẵn) — khác hẳn
+  feed cộng đồng toàn cục này (2 entry ghép cặp, không theo malId nào).
 - [ ] Biểu đồ phân bố điểm + số người xem (`/anime/{id}/statistics`), nhạc OP/ED (`/anime/{id}/themes`)
 - [ ] Nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`) — chuyển từ MVP 3 cũ
 
