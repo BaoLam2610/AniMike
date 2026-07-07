@@ -2,6 +2,7 @@ package com.lambao.animike.ui.characterdetail
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +53,7 @@ import com.lambao.animike.ui.theme.Dimens
 fun CharacterDetailScreen(
     onBackClick: () -> Unit,
     onNavigateToDetail: (Int) -> Unit,
+    onNavigateToPersonDetail: (Int) -> Unit,
     viewModel: CharacterDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -60,6 +62,7 @@ fun CharacterDetailScreen(
         viewModel.effect.collect { effect ->
             when (effect) {
                 is CharacterDetailEffect.NavigateToDetail -> onNavigateToDetail(effect.malId)
+                is CharacterDetailEffect.NavigateToPersonDetail -> onNavigateToPersonDetail(effect.personMalId)
             }
         }
     }
@@ -149,7 +152,12 @@ private fun CharacterDetailContent(
             )
         }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
-        item { VoiceActorsSection(voiceActors = voiceActors) }
+        item {
+            VoiceActorsSection(
+                voiceActors = voiceActors,
+                onVoiceActorClick = { onEvent(CharacterDetailEvent.OnVoiceActorClick(it)) },
+            )
+        }
         item { Spacer(Modifier.height(Dimens.SpaceXl)) }
     }
 }
@@ -304,7 +312,7 @@ private fun AnimeAppearanceItem(appearance: CharacterAnimeAppearance, onClick: (
 
 // Cùng lý do AnimatedVisibility với AnimeAppearancesSection ở trên.
 @Composable
-private fun VoiceActorsSection(voiceActors: List<CharacterVoiceActor>) {
+private fun VoiceActorsSection(voiceActors: List<CharacterVoiceActor>, onVoiceActorClick: (Int) -> Unit) {
     AnimatedVisibility(visible = voiceActors.isNotEmpty()) {
         Column {
             Text(
@@ -317,20 +325,24 @@ private fun VoiceActorsSection(voiceActors: List<CharacterVoiceActor>) {
                 contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
                 horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
             ) {
-                items(voiceActors, key = { it.personMalId }) { voiceActor -> VoiceActorItem(voiceActor) }
+                items(voiceActors, key = { it.personMalId }) { voiceActor ->
+                    VoiceActorItem(voiceActor, onClick = { onVoiceActorClick(voiceActor.personMalId) })
+                }
             }
         }
     }
 }
 
-// KHÔNG có onClick — People Detail (MVP5 mục 2) chưa code, xem docs/ROADMAP.md.
+// MVP5 mục 2 (People Detail) đã có — bấm mở People Detail.
 @Composable
-private fun VoiceActorItem(voiceActor: CharacterVoiceActor) {
+private fun VoiceActorItem(voiceActor: CharacterVoiceActor, onClick: () -> Unit) {
     val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
     val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(Dimens.AvatarSize),
+        modifier = Modifier
+            .width(Dimens.AvatarSize)
+            .clickable(onClick = onClick),
     ) {
         AsyncImage(
             model = voiceActor.imageUrl,

@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.lambao.animike.data.local.AppDatabase
 import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
+import com.lambao.animike.data.local.dao.AnimeStaffDao
 import com.lambao.animike.data.local.dao.AnimeStatisticsDao
 import com.lambao.animike.data.local.dao.AnimeThemesDao
 import com.lambao.animike.data.local.dao.AnimeVideoDao
@@ -16,6 +17,9 @@ import com.lambao.animike.data.local.dao.CommunityRecommendationDao
 import com.lambao.animike.data.local.dao.FavoriteDao
 import com.lambao.animike.data.local.dao.GenreDao
 import com.lambao.animike.data.local.dao.NewEpisodeDao
+import com.lambao.animike.data.local.dao.PersonDetailDao
+import com.lambao.animike.data.local.dao.PersonStaffCreditDao
+import com.lambao.animike.data.local.dao.PersonVoiceRoleDao
 import com.lambao.animike.data.local.dao.PictureDao
 import com.lambao.animike.data.local.dao.ReviewPreviewDao
 import com.lambao.animike.data.local.dao.SeasonYearDao
@@ -96,4 +100,16 @@ object DatabaseModule {
     @Provides
     fun provideCharacterVoiceActorDao(database: AppDatabase): CharacterVoiceActorDao =
         database.characterVoiceActorDao()
+
+    @Provides
+    fun providePersonDetailDao(database: AppDatabase): PersonDetailDao = database.personDetailDao()
+
+    @Provides
+    fun providePersonStaffCreditDao(database: AppDatabase): PersonStaffCreditDao = database.personStaffCreditDao()
+
+    @Provides
+    fun providePersonVoiceRoleDao(database: AppDatabase): PersonVoiceRoleDao = database.personVoiceRoleDao()
+
+    @Provides
+    fun provideAnimeStaffDao(database: AppDatabase): AnimeStaffDao = database.animeStaffDao()
 }

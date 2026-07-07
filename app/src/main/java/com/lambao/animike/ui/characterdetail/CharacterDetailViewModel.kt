@@ -42,6 +42,9 @@ class CharacterDetailViewModel @Inject constructor(
             }
 
             is CharacterDetailEvent.OnAnimeClick -> sendEffect(CharacterDetailEffect.NavigateToDetail(event.malId))
+
+            is CharacterDetailEvent.OnVoiceActorClick ->
+                sendEffect(CharacterDetailEffect.NavigateToPersonDetail(event.personMalId))
         }
     }
 

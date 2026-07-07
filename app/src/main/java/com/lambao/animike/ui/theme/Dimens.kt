@@ -60,4 +60,10 @@ object Dimens {
     // EpisodeCardWidth (140dp) vì title promo/MV dài hơn ("PV 1 English dub
     // version") + có dòng subtitle bài hát/nghệ sĩ cho MV.
     val VideoCardWidth = 200.dp
+
+    // "Vai diễn lồng tiếng" ở People Detail (MVP5) — thumbnail "duo" ghép ảnh
+    // anime (poster 2:3 thu nhỏ) + avatar nhân vật đè góc dưới-phải.
+    val VoiceRoleThumbnailWidth = 48.dp
+    val VoiceRoleThumbnailHeight = 64.dp
+    val VoiceRoleCharacterBadgeSize = 32.dp
 }

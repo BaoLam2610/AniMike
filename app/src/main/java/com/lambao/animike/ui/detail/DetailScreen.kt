@@ -89,6 +89,7 @@ import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.AnimeReview
+import com.lambao.animike.domain.model.AnimeStaffMember
 import com.lambao.animike.domain.model.AnimeThemes
 import com.lambao.animike.domain.model.AnimeVideo
 import com.lambao.animike.domain.model.Episode
@@ -112,6 +113,7 @@ fun DetailScreen(
     onNavigateToEpisodes: (Int) -> Unit,
     onNavigateToCharacters: (Int) -> Unit,
     onNavigateToCharacterDetail: (Int) -> Unit,
+    onNavigateToPersonDetail: (Int) -> Unit,
     onNavigateToReviews: (Int) -> Unit,
     onNavigateToReviewDetail: () -> Unit,
     viewModel: DetailViewModel = hiltViewModel(),
@@ -176,6 +178,7 @@ fun DetailScreen(
                 is DetailEffect.NavigateToEpisodes -> onNavigateToEpisodes(effect.malId)
                 is DetailEffect.NavigateToCharacters -> onNavigateToCharacters(effect.malId)
                 is DetailEffect.NavigateToCharacterDetail -> onNavigateToCharacterDetail(effect.characterId)
+                is DetailEffect.NavigateToPersonDetail -> onNavigateToPersonDetail(effect.personMalId)
                 is DetailEffect.NavigateToReviews -> onNavigateToReviews(effect.malId)
                 DetailEffect.NavigateToReviewDetail -> onNavigateToReviewDetail()
             }
@@ -256,6 +259,7 @@ private fun DetailScreenContent(
                     DetailContent(
                         detail = state.detail,
                         characters = state.characters,
+                        staff = state.staff,
                         recommendations = state.recommendations,
                         episodes = state.episodes,
                         reviews = state.reviews,
@@ -338,6 +342,7 @@ private fun TopBar(isFavorite: Boolean, showFavorite: Boolean, onBackClick: () -
 private fun DetailContent(
     detail: AnimeDetail,
     characters: List<AnimeCharacter>,
+    staff: List<AnimeStaffMember>,
     recommendations: List<Anime>,
     episodes: List<Episode>,
     reviews: List<AnimeReview>,
@@ -390,6 +395,15 @@ private fun DetailContent(
                 characters = characters,
                 onSeeAllClick = { onEvent(DetailEvent.OnSeeAllCharactersClick) },
                 onCharacterClick = { onEvent(DetailEvent.OnCharacterClick(it)) },
+            )
+        }
+        item { Spacer(Modifier.height(Dimens.SpaceLg)) }
+        item {
+            // MVP5 "Ê-kíp sản xuất" — đặt ngay sau "Nhân vật & Seiyuu" (cùng
+            // nhóm "ai đứng sau bộ phim"), bấm 1 người mở People Detail.
+            StaffSection(
+                staff = staff,
+                onStaffMemberClick = { onEvent(DetailEvent.OnStaffMemberClick(it)) },
             )
         }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
@@ -829,6 +843,76 @@ private fun CharacterItem(character: AnimeCharacter, onClick: () -> Unit) {
         // kiện chính là nguyên nhân nhấp nhô).
         Text(
             text = character.voiceActorName ?: "",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+// MVP5 "Ê-kíp sản xuất" (/anime/{id}/staff) — cùng bố cục CharactersSection
+// nhưng KHÔNG có "Xem tất cả" (chưa có màn riêng, response vốn không phân
+// trang nên preview đã là toàn bộ danh sách). AnimatedVisibility cùng lý do.
+@Composable
+private fun StaffSection(staff: List<AnimeStaffMember>, onStaffMemberClick: (Int) -> Unit) {
+    AnimatedVisibility(visible = staff.isNotEmpty()) {
+        Column {
+            Text(
+                text = "Ê-kíp sản xuất",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(horizontal = Dimens.ScreenPadding),
+            )
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
+            ) {
+                items(staff, key = { it.personMalId }) { member ->
+                    StaffMemberItem(member, onClick = { onStaffMemberClick(member.personMalId) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StaffMemberItem(member: AnimeStaffMember, onClick: () -> Unit) {
+    val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
+    val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .width(Dimens.AvatarSize)
+            .clickable(onClick = onClick),
+    ) {
+        AsyncImage(
+            model = member.imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            placeholder = placeholderPainter,
+            error = placeholderPainter,
+            fallback = placeholderPainter,
+            modifier = Modifier
+                .size(Dimens.AvatarSize)
+                .clip(CircleShape),
+        )
+        Text(
+            text = member.name,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+            minLines = 2,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = Dimens.SpaceXs),
+        )
+        // 1 người có thể giữ nhiều vai trò (VD ["Director", "Storyboard"]) —
+        // ghép lại 1 dòng, luôn render (rỗng nếu thiếu) để cùng chiều cao,
+        // cùng lý do dòng seiyuu của CharacterItem.
+        Text(
+            text = member.positions.joinToString(", "),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

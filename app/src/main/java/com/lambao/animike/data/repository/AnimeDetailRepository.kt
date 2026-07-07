@@ -4,6 +4,7 @@ import androidx.paging.PagingSource
 import com.lambao.animike.data.local.CacheTtl
 import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
+import com.lambao.animike.data.local.dao.AnimeStaffDao
 import com.lambao.animike.data.local.dao.AnimeStatisticsDao
 import com.lambao.animike.data.local.dao.AnimeThemesDao
 import com.lambao.animike.data.local.dao.AnimeVideoDao
@@ -12,6 +13,7 @@ import com.lambao.animike.data.local.dao.PictureDao
 import com.lambao.animike.data.local.dao.ReviewPreviewDao
 import com.lambao.animike.data.local.dao.StreamingLinkDao
 import com.lambao.animike.data.local.entity.AnimeListKey
+import com.lambao.animike.data.local.entity.CachedAnimeStaffMemberEntity
 import com.lambao.animike.data.local.entity.CachedAnimeVideoEntity
 import com.lambao.animike.data.local.entity.CachedCharacterEntity
 import com.lambao.animike.data.local.entity.CachedPictureEntity
@@ -28,6 +30,7 @@ import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.AnimeReview
+import com.lambao.animike.domain.model.AnimeStaffMember
 import com.lambao.animike.domain.model.AnimeStatistics
 import com.lambao.animike.domain.model.AnimeThemes
 import com.lambao.animike.domain.model.AnimeVideo
@@ -100,6 +103,11 @@ interface AnimeDetailRepository {
     // /videos/episodes) — danh sách PV/MV gần như tĩnh, TTL dài (7 ngày).
     fun observeVideos(malId: Int): Flow<List<AnimeVideo>>
     suspend fun refreshVideos(malId: Int, force: Boolean = false): ApiResult<Unit>
+
+    // MVP5 SWR cho "Ê-kíp sản xuất" (/anime/{id}/staff) — ê-kíp 1 anime gần
+    // như tĩnh, TTL dài (7 ngày) như Characters/Recommendations.
+    fun observeStaff(malId: Int): Flow<List<AnimeStaffMember>>
+    suspend fun refreshStaff(malId: Int, force: Boolean = false): ApiResult<Unit>
 }
 
 private const val REVIEWS_LIMIT = 5
@@ -115,6 +123,7 @@ class AnimeDetailRepositoryImpl @Inject constructor(
     private val animeThemesDao: AnimeThemesDao,
     private val streamingLinkDao: StreamingLinkDao,
     private val animeVideoDao: AnimeVideoDao,
+    private val animeStaffDao: AnimeStaffDao,
 ) : AnimeDetailRepository {
 
     override fun observeAnimeDetail(malId: Int): Flow<AnimeDetail?> =
@@ -400,6 +409,45 @@ class AnimeDetailRepositoryImpl @Inject constructor(
                 videos.mapIndexed { index, video -> video.toEntity(malId, index, fetchedAt) }
             }
             animeVideoDao.replace(malId, entities)
+        }
+    }
+
+    override fun observeStaff(malId: Int): Flow<List<AnimeStaffMember>> =
+        // personMalId < 0: lọc bỏ sentinel row (xem refreshStaff).
+        animeStaffDao.observe(malId).map { entities ->
+            entities.filter { it.personMalId >= 0 }.map { it.toDomain() }
+        }
+
+    override suspend fun refreshStaff(malId: Int, force: Boolean): ApiResult<Unit> {
+        if (!force) {
+            val fetchedAt = animeStaffDao.getFetchedAt(malId)
+            if (fetchedAt != null && !isExpired(fetchedAt, CacheTtl.STAFF_MS)) {
+                return ApiResult.Success(Unit)
+            }
+        }
+        return safeApiCall {
+            // distinctBy: phòng Jikan trả trùng trong cùng response — cùng lý
+            // do Characters/Recommendations ở trên.
+            val staff = api.getAnimeStaff(malId).data.mapNotNull { it.toDomain() }.distinctBy { it.personMalId }
+            val fetchedAt = System.currentTimeMillis()
+            val entities = if (staff.isEmpty()) {
+                // Sentinel row (personMalId=-1, MAL person id thật luôn dương)
+                // — cùng lý do với Recommendations/Reviews/Pictures/Characters.
+                listOf(
+                    CachedAnimeStaffMemberEntity(
+                        malId = malId,
+                        personMalId = -1,
+                        name = "",
+                        imageUrl = null,
+                        positionsEncoded = "",
+                        position = 0,
+                        fetchedAt = fetchedAt,
+                    ),
+                )
+            } else {
+                staff.mapIndexed { index, member -> member.toEntity(malId, index, fetchedAt) }
+            }
+            animeStaffDao.replace(malId, entities)
         }
     }
 }

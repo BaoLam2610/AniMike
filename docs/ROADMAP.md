@@ -501,14 +501,58 @@ nhất" chứ không theo thứ tự liệt kê gốc trong roadmap:
     tránh dùng trong app code. Đổi sang `popBackStack(route, inclusive)` built-in
     ở trên — bỏ được `@SuppressLint`, vòng `while` tự viết, và tham số `isMatch`
     lambda (framework tự lo phần so khớp, đã được Navigation team test).
-- [ ] **2. People/Seiyuu Detail** (`/people/{id}/full`, `/anime/{id}/staff`) —
-  làm ngay sau vì Character Detail vừa xong đã tự có entry point (tap voices).
-  Thêm mục "Ê-kíp sản xuất" (staff) vào Detail screen làm entry point thứ 2.
-  Thiết kế: cấu trúc hero giống Character Detail nhưng đổi accent sang
-  `primary` (tím) để phân biệt "người thật" khỏi "nhân vật hư cấu". `voices`
-  có thể tới **541 item** (đã verify, KHÔNG pagination) → bắt buộc local
-  search/filter tại client (giống pattern `CharactersScreen`), KHÔNG dùng
-  Paging 3 vì server không phân trang endpoint này.
+- [x] **2. People/Seiyuu Detail** (`/people/{id}/full`, `/anime/{id}/staff`) ✅
+  — 2 entry point: "Lồng tiếng bởi" ở Character Detail (trước đó CỐ TÌNH chưa
+  có onClick, giờ nối vào) và mục MỚI "Ê-kíp sản xuất" ở Detail
+  (`/anime/{id}/staff`). Thiết kế: cấu trúc hero portrait giống Character
+  Detail nhưng đổi accent sang `primary` (tím) để phân biệt "người thật" khỏi
+  "nhân vật hư cấu" — cùng badge `favorites` (♥, giờ màu `primary`), chip
+  `alternate_names` (giống nicknames). Sáng tạo riêng cho People Detail
+  (không có ở Character Detail):
+  - **Stat strip** ngay dưới hero: 2 chip nhanh "🎙 N vai diễn"/"🎬 N tác phẩm"
+    (nền `primary` alpha 15%) — cho cảm giác "career snapshot" tức thì, ẩn chip
+    nào bằng 0.
+  - **2 tab** "Vai trò sản xuất"/"Vai diễn lồng tiếng" (TabRow Material3, cùng
+    style `DetailTabRow`) thay vì 2 section xếp chồng — gọn hơn khi 1 người có
+    cả 2 loại credit.
+  - **"Vai diễn lồng tiếng" bắt buộc local search** — `voices[]` có thể tới
+    **541 item** (đã verify, KHÔNG pagination), lọc theo tên nhân vật/tên anime
+    ngay trong bộ nhớ (computed `filteredVoiceRoles`, cùng pattern
+    `CharactersState.filteredCharacters`). **Cố tình KHÔNG dùng `AnimatedContent`
+    crossfade** khi đổi tab (khác `ExploreTabsSection` ở DetailScreen) — list
+    541 item phải nằm trong `items()` của chính `LazyColumn` ngoài cùng để lazy
+    load/recycle thật sự; bọc trong `AnimatedContent` sẽ ép compose hết 1 lần,
+    mất lợi ích lazy. Đánh đổi: mất hiệu ứng chuyển tab, giữ hiệu năng.
+  - **Duo thumbnail** cho mỗi dòng vai diễn: poster anime (2:3 thu nhỏ) +
+    avatar nhân vật đè góc dưới-phải (viền màu nền tạo cảm giác "cắt dán") —
+    thay vì avatar đơn điệu, cho thấy ngay CẢ nhân vật lẫn bộ phim trong 1 cái
+    nhìn.
+  - Kiến trúc: `PersonDetailRepository` riêng (khoá `personMalId`, KHÁC
+    `malId`/`characterId`) — áp dụng NGAY bài học atomicity từ Character
+    Detail: 3 bảng Room (core + 2 list, KHÔNG sentinel row) ghi trong 1
+    `database.withTransaction { }` từ đầu, không phải sửa lại qua review lần
+    nữa. "Ê-kíp sản xuất" (`AnimeStaffMember`) lại thuộc `AnimeDetailRepository`
+    (khoá theo `malId` của anime, giống Characters/Recommendations — CÓ
+    sentinel row vì gate TTL độc lập trên chính bảng `cached_anime_staff_member`).
+  - TTL 7 ngày cho cả 2 (`CacheTtl.PERSON_DETAIL_MS`/`STAFF_MS`). Route
+    `person/{personId}` (arg riêng, aggregate thứ 3 sau anime/nhân vật). DB
+    version 13→14 (4 bảng mới: `cached_person_detail`,
+    `cached_person_staff_credit`, `cached_person_voice_role`,
+    `cached_anime_staff_member`).
+  - **Sửa qua review**: 2 vấn đề thật (không phải nitpick):
+    - **Mất dữ liệu credit**: bản đầu `PersonStaffCredit.position: String` +
+      `distinctBy { it.anime.malId }` — nếu 1 người giữ NHIỀU vai trò trên
+      CÙNG 1 anime (Jikan trả 2 entry riêng cùng `anime.mal_id`, khác
+      `position`, VD đạo diễn kiêm storyboard), `distinctBy` sẽ ÂM THẦM XOÁ 1
+      credit thật. Sửa bằng `positions: List<String>` (đổi thành list, cùng
+      pattern `AnimeStaffMember`) + `List<PersonStaffRefDto>.toStaffCredits()`
+      (hàm mức-LIST mới ở `PersonDetailMapper.kt`, gộp theo `anime.malId`
+      thay vì lọc theo item đơn).
+    - **Vị trí cuộn không reset khi đổi tab**: 2 tab "Vai trò sản xuất"/"Vai
+      diễn lồng tiếng" nằm CHUNG 1 `LazyColumn` (cố tình, xem lý do
+      AnimatedContent ở trên) nên đổi tab không tự cuộn về đầu — cuộn sâu ở
+      tab 541 item rồi đổi sang tab ~15 item sẽ bị clamp/lạc vị trí. Sửa bằng
+      `LaunchedEffect(effectiveTab) { listState.animateScrollToItem(0) }`.
 - [ ] **3. Studio Detail** (`/producers/{id}/full`) — bấm tên studio ở Detail
   để mở. Cần đổi `AnimeDetail.studios` từ `String` đã join sẵn sang list có
   `mal_id` (đã xác nhận field hiện tại không mang id) — việc này tách biệt 2

@@ -5,6 +5,7 @@ import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.AnimeReview
+import com.lambao.animike.domain.model.AnimeStaffMember
 import com.lambao.animike.domain.model.AnimeThemes
 import com.lambao.animike.domain.model.AnimeVideo
 import com.lambao.animike.domain.model.Episode
@@ -17,6 +18,8 @@ data class DetailState(
     val detail: AnimeDetail? = null,
     val error: String? = null,
     val characters: List<AnimeCharacter> = emptyList(),
+    // MVP5 "Ê-kíp sản xuất" (/anime/{id}/staff) — bấm 1 người mở People Detail.
+    val staff: List<AnimeStaffMember> = emptyList(),
     val recommendations: List<Anime> = emptyList(),
     val episodes: List<Episode> = emptyList(),
     val reviews: List<AnimeReview> = emptyList(),
@@ -66,6 +69,8 @@ sealed interface DetailEvent {
     // Bấm 1 CharacterItem trong section "Nhân vật & Seiyuu" — mở Character
     // Detail (MVP5, characterId KHÁC malId của anime đang xem).
     data class OnCharacterClick(val characterId: Int) : DetailEvent
+    // Bấm 1 người trong "Ê-kíp sản xuất" — mở People Detail (MVP5 mục 2).
+    data class OnStaffMemberClick(val personMalId: Int) : DetailEvent
     // Bấm 1 ReviewCard trong tab "Đánh giá" — mở ReviewDetailScreen xem đầy
     // đủ (cùng hành vi click ở ReviewsScreen, xem ReviewDetailScreen.kt).
     data class OnReviewClick(val review: AnimeReview) : DetailEvent
@@ -87,6 +92,7 @@ sealed interface DetailEffect {
     data class NavigateToEpisodes(val malId: Int) : DetailEffect
     data class NavigateToCharacters(val malId: Int) : DetailEffect
     data class NavigateToCharacterDetail(val characterId: Int) : DetailEffect
+    data class NavigateToPersonDetail(val personMalId: Int) : DetailEffect
     data class NavigateToReviews(val malId: Int) : DetailEffect
     data object NavigateToReviewDetail : DetailEffect
     // Tải ảnh xuống máy qua DownloadManager (nút tải trong viewer full-screen).

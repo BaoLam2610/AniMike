@@ -17,8 +17,12 @@ data class CharacterDetailState(
 sealed interface CharacterDetailEvent {
     data object OnRetry : CharacterDetailEvent
     data class OnAnimeClick(val malId: Int) : CharacterDetailEvent
+    // Bấm 1 VoiceActorItem trong "Lồng tiếng bởi" — mở People Detail (MVP5
+    // mục 2), trước đây KHÔNG có onClick vì People Detail chưa tồn tại.
+    data class OnVoiceActorClick(val personMalId: Int) : CharacterDetailEvent
 }
 
 sealed interface CharacterDetailEffect {
     data class NavigateToDetail(val malId: Int) : CharacterDetailEffect
+    data class NavigateToPersonDetail(val personMalId: Int) : CharacterDetailEffect
 }

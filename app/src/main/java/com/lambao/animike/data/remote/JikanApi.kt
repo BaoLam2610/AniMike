@@ -12,10 +12,12 @@ import com.lambao.animike.data.remote.dto.GenreDto
 import com.lambao.animike.data.remote.dto.ImagesDto
 import com.lambao.animike.data.remote.dto.JikanListResponse
 import com.lambao.animike.data.remote.dto.JikanResponse
+import com.lambao.animike.data.remote.dto.PersonFullDto
 import com.lambao.animike.data.remote.dto.RecommendationEntryDto
 import com.lambao.animike.data.remote.dto.RecommendationPairDto
 import com.lambao.animike.data.remote.dto.ReviewDto
 import com.lambao.animike.data.remote.dto.SeasonYearDto
+import com.lambao.animike.data.remote.dto.StaffEntryDto
 import com.lambao.animike.data.remote.dto.StreamingLinkDto
 import com.lambao.animike.data.remote.dto.WatchEpisodeEntryDto
 import retrofit2.http.GET
@@ -137,4 +139,15 @@ interface JikanApi {
     // (xem AnimeVideosDto).
     @GET("anime/{id}/videos")
     suspend fun getAnimeVideos(@Path("id") id: Int): JikanResponse<AnimeVideosDto>
+
+    // MVP5 People/Seiyuu Detail — 1 object/người (không phân trang), verify
+    // qua curl (xem .claude/skills/jikan-api/references/mvp5-characters-people-studio.md).
+    // Lưu ý: voices[] có thể tới vài trăm item (541 ở test case) — KHÔNG phân
+    // trang, UI phải local-search thay vì Paging.
+    @GET("people/{id}/full")
+    suspend fun getPersonFull(@Path("id") id: Int): JikanResponse<PersonFullDto>
+
+    // MVP5 "Ê-kíp sản xuất" ở Detail — response KHÔNG có field `pagination`.
+    @GET("anime/{id}/staff")
+    suspend fun getAnimeStaff(@Path("id") id: Int): JikanListResponse<StaffEntryDto>
 }

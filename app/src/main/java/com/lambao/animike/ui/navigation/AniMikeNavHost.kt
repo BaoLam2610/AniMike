@@ -41,6 +41,7 @@ import com.lambao.animike.ui.episodes.EpisodesScreen
 import com.lambao.animike.ui.favorites.FavoritesScreen
 import com.lambao.animike.ui.home.HomeScreen
 import com.lambao.animike.ui.newepisodes.NewEpisodesScreen
+import com.lambao.animike.ui.persondetail.PersonDetailScreen
 import com.lambao.animike.ui.reviewdetail.ReviewDetailScreen
 import com.lambao.animike.ui.reviews.ReviewsScreen
 import com.lambao.animike.ui.reviews.ReviewsViewModel
@@ -78,6 +79,9 @@ private fun NavController.navigateToDetail(malId: Int) = navigateOrPopToExisting
 
 private fun NavController.navigateToCharacterDetail(characterId: Int) =
     navigateOrPopToExisting(Routes.characterDetail(characterId))
+
+private fun NavController.navigateToPersonDetail(personId: Int) =
+    navigateOrPopToExisting(Routes.personDetail(personId))
 
 // Polish motion/transition giữa các màn hình (MVP3, mục cuối cùng). 2 loại:
 // - Đổi tab bottom-nav (cả 2 đầu đều là 1 trong 4 route gốc) → crossfade nhẹ,
@@ -286,6 +290,7 @@ fun AniMikeNavHost() {
                     onNavigateToEpisodes = { malId -> navController.navigate(Routes.episodes(malId)) },
                     onNavigateToCharacters = { malId -> navController.navigate(Routes.characters(malId)) },
                     onNavigateToCharacterDetail = { characterId -> navController.navigateToCharacterDetail(characterId) },
+                    onNavigateToPersonDetail = { personId -> navController.navigateToPersonDetail(personId) },
                     onNavigateToReviews = { malId -> navController.navigate(Routes.reviews(malId)) },
                     onNavigateToReviewDetail = { navController.navigate(Routes.DETAIL_REVIEW_DETAIL) },
                     viewModel = hiltViewModel(backStackEntry),
@@ -314,6 +319,17 @@ fun AniMikeNavHost() {
             ) {
                 // characterId được CharacterDetailViewModel tự đọc qua SavedStateHandle.
                 CharacterDetailScreen(
+                    onBackClick = navController::popBackStack,
+                    onNavigateToDetail = { malId -> navController.navigateToDetail(malId) },
+                    onNavigateToPersonDetail = { personId -> navController.navigateToPersonDetail(personId) },
+                )
+            }
+            composable(
+                route = Routes.PERSON_DETAIL,
+                arguments = listOf(navArgument(Routes.PERSON_DETAIL_ARG_PERSON_ID) { type = NavType.IntType }),
+            ) {
+                // personId được PersonDetailViewModel tự đọc qua SavedStateHandle.
+                PersonDetailScreen(
                     onBackClick = navController::popBackStack,
                     onNavigateToDetail = { malId -> navController.navigateToDetail(malId) },
                 )

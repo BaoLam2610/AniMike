@@ -23,6 +23,11 @@ object Routes {
     // KHÁC (khoá theo id nhân vật, không phải id anime).
     const val CHARACTER_DETAIL = "character/{characterId}"
     const val CHARACTER_DETAIL_ARG_CHARACTER_ID = "characterId"
+    // MVP5 People/Seiyuu Detail — mở từ "Lồng tiếng bởi" ở Character Detail
+    // hoặc "Ê-kíp sản xuất" ở Detail. Arg tên "personId" (khác "malId"/
+    // "characterId") — aggregate thứ 3, khoá theo id người.
+    const val PERSON_DETAIL = "person/{personId}"
+    const val PERSON_DETAIL_ARG_PERSON_ID = "personId"
     const val REVIEWS = "reviews/{malId}"
     const val REVIEWS_ARG_MAL_ID = "malId"
     // Dùng chung ReviewsViewModel với REVIEWS (giống SEARCH_FILTER/SearchViewModel)
@@ -45,6 +50,7 @@ object Routes {
     fun episodes(malId: Int) = "episodes/$malId"
     fun characters(malId: Int) = "characters/$malId"
     fun characterDetail(characterId: Int) = "character/$characterId"
+    fun personDetail(personId: Int) = "person/$personId"
     fun reviews(malId: Int) = "reviews/$malId"
     // Nhận enum thay vì String thô — compiler bảo đảm route luôn round-trip
     // được qua AnimeListSource.valueOf ở AnimeListViewModel.

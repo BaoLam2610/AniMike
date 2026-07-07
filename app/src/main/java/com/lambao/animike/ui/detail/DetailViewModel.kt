@@ -38,6 +38,7 @@ class DetailViewModel @Inject constructor(
         // Episodes KHÔNG có Flow riêng — one-shot, set thẳng trong loadAll().
         observeCachedDetail()
         observeCharacters()
+        observeStaff()
         observeRecommendations()
         observeReviewPreview()
         observePictures()
@@ -102,6 +103,8 @@ class DetailViewModel @Inject constructor(
 
             is DetailEvent.OnCharacterClick -> sendEffect(DetailEffect.NavigateToCharacterDetail(event.characterId))
 
+            is DetailEvent.OnStaffMemberClick -> sendEffect(DetailEffect.NavigateToPersonDetail(event.personMalId))
+
             DetailEvent.OnSeeAllReviewsClick -> sendEffect(DetailEffect.NavigateToReviews(malId))
 
             is DetailEvent.OnReviewClick -> {
@@ -127,6 +130,14 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             repository.observeCharacters(malId).collect { characters ->
                 setState { copy(characters = characters) }
+            }
+        }
+    }
+
+    private fun observeStaff() {
+        viewModelScope.launch {
+            repository.observeStaff(malId).collect { staff ->
+                setState { copy(staff = staff) }
             }
         }
     }
@@ -222,15 +233,17 @@ class DetailViewModel @Inject constructor(
             setState { copy(episodes = episodesResult.data) }
         }
 
-        // Characters/recommendations/reviews/pictures/themes/videos: không
-        // setState thủ công — observeXxx() (Flow từ Room) trong init đã tự
-        // cập nhật state reactively khi refresh xong. refreshXxx tự quyết
+        // Characters/staff/recommendations/reviews/pictures/themes/videos:
+        // không setState thủ công — observeXxx() (Flow từ Room) trong init đã
+        // tự cập nhật state reactively khi refresh xong. refreshXxx tự quyết
         // định gọi API hay không dựa TTL (force=true khi pull-to-refresh sẽ bỏ
         // qua TTL). Videos để CUỐI vì tab Video nằm đáy trang (cùng logic thứ
         // tự-theo-hiển-thị với streaming ở trên). "Thống kê" ĐÃ CHUYỂN sang
         // ReviewsViewModel (màn Đánh giá "Xem tất cả") — không còn refresh ở
-        // đây, xem docs/ROADMAP.md.
+        // đây, xem docs/ROADMAP.md. Staff (MVP5) đặt ngay sau Characters vì
+        // section "Ê-kíp sản xuất" render ngay sau "Nhân vật & Seiyuu".
         loadMutex.withLock { repository.refreshCharacters(malId, force) }
+        loadMutex.withLock { repository.refreshStaff(malId, force) }
         loadMutex.withLock { repository.refreshRecommendations(malId, force) }
         loadMutex.withLock { repository.refreshReviewPreview(malId, force) }
         loadMutex.withLock { repository.refreshPictures(malId, force) }
