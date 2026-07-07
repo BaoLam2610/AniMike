@@ -4,6 +4,8 @@ import com.lambao.animike.data.repository.AnimeDetailRepository
 import com.lambao.animike.data.repository.AnimeDetailRepositoryImpl
 import com.lambao.animike.data.repository.AnimeRepository
 import com.lambao.animike.data.repository.AnimeRepositoryImpl
+import com.lambao.animike.data.repository.CharacterDetailRepository
+import com.lambao.animike.data.repository.CharacterDetailRepositoryImpl
 import com.lambao.animike.data.repository.FavoriteRepository
 import com.lambao.animike.data.repository.FavoriteRepositoryImpl
 import com.lambao.animike.data.repository.SchedulesRepository
@@ -45,4 +47,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindSchedulesRepository(impl: SchedulesRepositoryImpl): SchedulesRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCharacterDetailRepository(impl: CharacterDetailRepositoryImpl): CharacterDetailRepository
 }

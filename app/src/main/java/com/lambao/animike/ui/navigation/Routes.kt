@@ -18,6 +18,11 @@ object Routes {
     const val EPISODES_ARG_MAL_ID = "malId"
     const val CHARACTERS = "characters/{malId}"
     const val CHARACTERS_ARG_MAL_ID = "malId"
+    // MVP5 Character Detail — mở từ CharactersScreen (grid) hoặc tab preview
+    // ở Detail. Đặt tên arg "characterId" (khác "malId") vì đây là aggregate
+    // KHÁC (khoá theo id nhân vật, không phải id anime).
+    const val CHARACTER_DETAIL = "character/{characterId}"
+    const val CHARACTER_DETAIL_ARG_CHARACTER_ID = "characterId"
     const val REVIEWS = "reviews/{malId}"
     const val REVIEWS_ARG_MAL_ID = "malId"
     // Dùng chung ReviewsViewModel với REVIEWS (giống SEARCH_FILTER/SearchViewModel)
@@ -39,6 +44,7 @@ object Routes {
     fun detail(malId: Int) = "detail/$malId"
     fun episodes(malId: Int) = "episodes/$malId"
     fun characters(malId: Int) = "characters/$malId"
+    fun characterDetail(characterId: Int) = "character/$characterId"
     fun reviews(malId: Int) = "reviews/$malId"
     // Nhận enum thay vì String thô — compiler bảo đảm route luôn round-trip
     // được qua AnimeListSource.valueOf ở AnimeListViewModel.

@@ -35,6 +35,10 @@ object CacheTtl {
     // sóng, TTL dài như nhóm trên.
     const val STREAMING_MS = 7 * 24 * 60 * 60 * 1000L
     const val VIDEOS_MS = 7 * 24 * 60 * 60 * 1000L
+
+    // MVP5 Character Detail (/characters/{id}/full) — tiểu sử/danh sách xuất
+    // hiện/seiyuu của 1 nhân vật gần như tĩnh, TTL dài như Characters/Recommendations/Pictures.
+    const val CHARACTER_DETAIL_MS = 7 * 24 * 60 * 60 * 1000L
 }
 
 fun isExpired(fetchedAt: Long, ttlMs: Long, now: Long = System.currentTimeMillis()): Boolean {

@@ -63,6 +63,9 @@ sealed interface DetailEvent {
     data object OnSeeAllEpisodesClick : DetailEvent
     data object OnSeeAllCharactersClick : DetailEvent
     data object OnSeeAllReviewsClick : DetailEvent
+    // Bấm 1 CharacterItem trong section "Nhân vật & Seiyuu" — mở Character
+    // Detail (MVP5, characterId KHÁC malId của anime đang xem).
+    data class OnCharacterClick(val characterId: Int) : DetailEvent
     // Bấm 1 ReviewCard trong tab "Đánh giá" — mở ReviewDetailScreen xem đầy
     // đủ (cùng hành vi click ở ReviewsScreen, xem ReviewDetailScreen.kt).
     data class OnReviewClick(val review: AnimeReview) : DetailEvent
@@ -83,6 +86,7 @@ sealed interface DetailEffect {
     data class NavigateToDetail(val malId: Int) : DetailEffect
     data class NavigateToEpisodes(val malId: Int) : DetailEffect
     data class NavigateToCharacters(val malId: Int) : DetailEffect
+    data class NavigateToCharacterDetail(val characterId: Int) : DetailEffect
     data class NavigateToReviews(val malId: Int) : DetailEffect
     data object NavigateToReviewDetail : DetailEffect
     // Tải ảnh xuống máy qua DownloadManager (nút tải trong viewer full-screen).

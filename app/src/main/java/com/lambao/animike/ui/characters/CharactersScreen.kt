@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -48,9 +49,19 @@ import com.lambao.animike.ui.theme.Dimens
 @Composable
 fun CharactersScreen(
     onBackClick: () -> Unit,
+    onNavigateToCharacterDetail: (Int) -> Unit,
     viewModel: CharactersViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        viewModel.effect.collect { effect ->
+            when (effect) {
+                is CharactersEffect.NavigateToCharacterDetail -> onNavigateToCharacterDetail(effect.characterId)
+            }
+        }
+    }
+
     CharactersScreenContent(state = state, onBackClick = onBackClick, onEvent = viewModel::onEvent)
 }
 
@@ -82,7 +93,10 @@ private fun CharactersScreenContent(
             when {
                 // Cache-first tinh thần chung: còn dữ liệu thì luôn hiện — màn
                 // này không cache Room (dữ liệu phụ, xem AnimeDetailRepository).
-                state.allCharacters.isNotEmpty() -> CharactersGrid(characters = state.filteredCharacters)
+                state.allCharacters.isNotEmpty() -> CharactersGrid(
+                    characters = state.filteredCharacters,
+                    onCharacterClick = { onEvent(CharactersEvent.OnCharacterClick(it)) },
+                )
                 state.isLoading -> CharactersGridLoading()
                 state.error != null -> CharactersErrorContent(
                     message = state.error,
@@ -129,7 +143,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
 }
 
 @Composable
-private fun CharactersGrid(characters: List<AnimeCharacter>) {
+private fun CharactersGrid(characters: List<AnimeCharacter>, onCharacterClick: (Int) -> Unit) {
     if (characters.isEmpty()) {
         CharactersEmptyContent(message = "Không tìm thấy nhân vật")
         return
@@ -141,16 +155,21 @@ private fun CharactersGrid(characters: List<AnimeCharacter>) {
         horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
         verticalArrangement = Arrangement.spacedBy(Dimens.CardGap),
     ) {
-        items(characters, key = { it.malId }) { character -> CharacterGridItem(character) }
+        items(characters, key = { it.malId }) { character ->
+            CharacterGridItem(character, onClick = { onCharacterClick(character.malId) })
+        }
     }
 }
 
 @Composable
-private fun CharacterGridItem(character: AnimeCharacter) {
+private fun CharacterGridItem(character: AnimeCharacter, onClick: () -> Unit) {
     val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
     val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
         AsyncImage(
             model = character.imageUrl,
             contentDescription = null,

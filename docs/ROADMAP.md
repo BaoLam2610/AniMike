@@ -432,9 +432,101 @@ nút "Xem trên..." (`/anime/{id}/streaming`), tab media (`/anime/{id}/videos`)
       bằng `rememberLauncherForActivityResult(RequestPermission())` trong
       `DetailScreen`, chỉ xin quyền khi `SDK_INT` nằm trong khoảng 23..28 và
       chưa được cấp; API 29+ gọi thẳng không cần xin.
-- [ ] Top nhân vật (`/top/characters`), trang nhân vật (`/characters/{id}/full`)
-- [ ] Trang seiyuu/staff (`/people/{id}/full`, `/anime/{id}/staff`)
-- [ ] Trang studio (`/producers/{id}/full`) — bấm tên studio ở Detail để mở
+**Thứ tự triển khai đã thống nhất với user (2026-07)** — không có mockup ở
+`docs/UI/` cho cả 4 màn dưới đây (đã confirm qua Glob), tự thiết kế theo token
+`animike-design`. Shape endpoint đã verify sẵn ở
+`.claude/skills/jikan-api/references/mvp5-characters-people-studio.md` — xem
+trước khi code, không curl lại. Thứ tự dựa trên "entry point nào có sẵn/rẻ
+nhất" chứ không theo thứ tự liệt kê gốc trong roadmap:
+
+- [x] **1. Character Detail** (`/characters/{id}/full`) ✅ — làm trước tiên vì
+  entry point rẻ nhất: `CharactersScreen` card CHƯA có `onClick` trước đó, chỉ
+  cần thêm tap handler vào card có sẵn (cả CharactersScreen lẫn tab preview ở
+  Detail) thay vì dựng UI mới. Thiết kế: hero portrait full-bleed (dùng chung
+  `Dimens.HeroHeaderHeight` với AnimeDetail cho nhất quán) + gradient đáy, tên +
+  `name_kanji` đè đáy ảnh, badge `favorites` hình trái tim màu `secondary` góc
+  trên-phải (ẩn khi `favorites=0`, cùng quy tắc ẩn "N/A" của ScoreBadge), chip
+  ngang `nicknames`. 2 hàng ngang "Xuất hiện trong" (tái dùng `AnimeCard`, ẩn
+  badge điểm/năm vì endpoint không trả) và "Lồng tiếng bởi" (voices — CHƯA có
+  onClick, chờ People Detail mục 2). `about` thu gọn/xem thêm — trích
+  `ExpandableText` (trước đây `private` trong DetailScreen.kt) thành component
+  dùng chung ở `ui/components/` vì giờ có 2 nơi dùng.
+  - Kiến trúc: tách hẳn `CharacterDetailRepository` riêng (KHÔNG nhét vào
+    `AnimeDetailRepository` vốn đã có 10 cặp observe/refresh cho aggregate
+    "anime") — aggregate mới khoá theo `characterId`. Domain `CharacterDetail`
+    CHỈ chứa field scalar (name/nameKanji/imageUrl/nicknames/favorites/about),
+    giống `AnimeDetail` không ôm theo characters/recommendations — 2 danh sách
+    "Xuất hiện trong"/"Lồng tiếng bởi" là 2 Flow riêng dù cùng đến từ 1 API
+    call, vì shape có cấu trúc (không phải string) nên không delimiter-encode
+    chung 1 row được (khác genres).
+  - Cache Room: 3 bảng — `cached_character_detail` (core, 1 row/nhân vật,
+    nicknames encode delimiter ASCII giống genresEncoded), `cached_character_
+    anime_appearance` + `cached_character_voice_actor` (list, PK composite
+    `characterId`+id con, distinctBy chống trùng). CHỈ core có `getFetchedAt`
+    — 2 bảng list không cần vì cả 3 luôn ghi cùng lúc trong 1 lần gọi
+    `/characters/{id}/full` (khác Statistics/Themes là 2 API riêng), và cũng
+    KHÔNG cần sentinel row khi rỗng thật vì TTL gate không phụ thuộc chúng.
+    TTL 7 ngày (`CacheTtl.CHARACTER_DETAIL_MS`, giống Characters/Recommendations).
+    **Sửa qua review**: bản đầu ghi 3 bảng tuần tự KHÔNG bọc transaction — nếu
+    coroutine bị cancel giữa chừng hoặc 1 trong 2 `replace()` sau ném exception,
+    bảng core đã commit (TTL "tươi") nhưng 2 bảng danh sách chưa ghi kịp → lần
+    refresh sau thấy core còn tươi nên bỏ qua gọi lại API, 2 section kẹt sai
+    suốt 7 ngày mà user không có cách tự sửa. Sửa bằng `AppDatabase.
+    withTransaction { }` bọc cả 3 lệnh ghi (`room-ktx`), khớp đúng giả định "TTL
+    gate dùng chung 1 bảng chỉ đúng nếu 3 bảng luôn sống/chết cùng nhau".
+    Cũng sửa `nicknames` chưa `distinct()` trước khi dùng làm `LazyRow` key
+    (crash "Key ... was already used" nếu Jikan trả nickname trùng).
+  - Route `character/{characterId}` (arg tên `characterId`, KHÁC `malId` — nhấn
+    mạnh đây là aggregate khác, tránh nhầm lẫn khi đọc code điều hướng).
+  - **Phát sinh sau khi dùng thử (user report)**: bấm qua lại giữa 1 anime và 1
+    nhân vật xuất hiện trong đó (Anime Detail → "Xuất hiện trong" → Character
+    Detail → "Xuất hiện trong" → cùng Anime Detail đó → ...) cứ push thêm 1
+    bản Detail/Character Detail MỚI vào back stack mỗi lần bấm — back stack
+    phình vô hạn, cảm giác như "vòng lặp màn hình". Cùng lỗi tiềm ẩn với chuỗi
+    Đề xuất (Anime Detail → Đề xuất → Anime Detail khác → ...) vốn đã tồn tại
+    từ trước, chỉ là Character Detail làm lộ rõ ra. Sửa bằng
+    `NavController.navigateOrPopToExisting()` (helper mới ở
+    `AniMikeNavHost.kt`) — dùng `popBackStack(route, inclusive = false)` (API
+    public của Navigation, tự so khớp route ĐÃ ĐIỀN THAM SỐ THỰC, giống hệt
+    cách `navigate(route)` chọn destination, nên không đụng nhầm anime/nhân
+    vật KHÁC id) trước; nếu tìm thấy (trả `true`) thì đã tự pop tới đúng entry
+    đó (tương đương user tự bấm back nhiều lần) thay vì push bản trùng, nếu
+    không (`false`) mới `navigate()` bình thường. Áp dụng cho MỌI lệnh
+    `navController.navigate(Routes.detail(...))`/`Routes.characterDetail(...)`
+    trong `AniMikeNavHost.kt` (kể cả chuỗi Đề xuất Anime↔Anime), không chỉ
+    riêng case Character Detail.
+    **Sửa qua review (vòng 2)**: bản đầu tự viết vòng lặp `popBackStack()` +
+    tự so khớp qua `NavController.currentBackStack` — property đó bị đánh dấu
+    `@RestrictedApi` (phải thêm `@SuppressLint` mới build được), dấu hiệu nên
+    tránh dùng trong app code. Đổi sang `popBackStack(route, inclusive)` built-in
+    ở trên — bỏ được `@SuppressLint`, vòng `while` tự viết, và tham số `isMatch`
+    lambda (framework tự lo phần so khớp, đã được Navigation team test).
+- [ ] **2. People/Seiyuu Detail** (`/people/{id}/full`, `/anime/{id}/staff`) —
+  làm ngay sau vì Character Detail vừa xong đã tự có entry point (tap voices).
+  Thêm mục "Ê-kíp sản xuất" (staff) vào Detail screen làm entry point thứ 2.
+  Thiết kế: cấu trúc hero giống Character Detail nhưng đổi accent sang
+  `primary` (tím) để phân biệt "người thật" khỏi "nhân vật hư cấu". `voices`
+  có thể tới **541 item** (đã verify, KHÔNG pagination) → bắt buộc local
+  search/filter tại client (giống pattern `CharactersScreen`), KHÔNG dùng
+  Paging 3 vì server không phân trang endpoint này.
+- [ ] **3. Studio Detail** (`/producers/{id}/full`) — bấm tên studio ở Detail
+  để mở. Cần đổi `AnimeDetail.studios` từ `String` đã join sẵn sang list có
+  `mal_id` (đã xác nhận field hiện tại không mang id) — việc này tách biệt 2
+  mục trên nên xếp sau khi đã quen nhịp 2 detail screen kia. Thiết kế: logo
+  làm điểm nhấn (không phải cover full-bleed, vì logo thường nền trong
+  suốt/vuông) đặt trên card `surface` giữa màn, quanh đó là `established` +
+  tổng `count` anime + chip link `external[]`. Danh sách anime đã sản xuất
+  TÁI DÙNG `searchAnime` Paging 3 có sẵn, chỉ thêm query `producers={id}` (đã
+  verify pagination thật qua `/anime?producers=1`, KHÔNG cần endpoint/DTO mới).
+- [ ] **4. "Top nhân vật"** (`/top/characters`, discovery) — xếp CUỐI vì đây
+  là màn DUY NHẤT không có entry point sẵn trong app (cần quyết định đặt ở
+  đâu — Home? tab riêng? Search?), và chỉ có ý nghĩa khi Character Detail (mục
+  1) đã tồn tại để điều hướng tới khi bấm 1 nhân vật trong danh sách. Thiết
+  kế: lưới portrait 2 cột (khác 3 cột AnimeCard vì ảnh nhân vật dọc hơn), rank
+  ribbon top-3 (vàng/bạc/đồng) không phá quy tắc 1-accent-per-context vì là
+  ribbon xếp hạng chứ không phải accent UI, hiện `favorites` dạng "❤ 180K" góc
+  dưới. Pagination thật (`last_visible_page: 3254` cho 81329 item) → Paging 3
+  chuẩn.
 
 ### MVP 6 — Tracking local
 - [ ] Trạng thái xem: Đang xem / Đã xem / Tạm dừng / Bỏ / Dự định xem (Room)

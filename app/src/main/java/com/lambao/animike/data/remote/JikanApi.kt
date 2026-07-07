@@ -6,6 +6,7 @@ import com.lambao.animike.data.remote.dto.AnimeStatisticsDto
 import com.lambao.animike.data.remote.dto.AnimeThemesDto
 import com.lambao.animike.data.remote.dto.AnimeVideosDto
 import com.lambao.animike.data.remote.dto.CharacterEntryDto
+import com.lambao.animike.data.remote.dto.CharacterFullDto
 import com.lambao.animike.data.remote.dto.EpisodeDto
 import com.lambao.animike.data.remote.dto.GenreDto
 import com.lambao.animike.data.remote.dto.ImagesDto
@@ -61,6 +62,11 @@ interface JikanApi {
 
     @GET("anime/{id}/characters")
     suspend fun getCharacters(@Path("id") id: Int): JikanListResponse<CharacterEntryDto>
+
+    // MVP5 Character Detail — 1 object/nhân vật (không phân trang), verify
+    // qua curl (xem .claude/skills/jikan-api/references/mvp5-characters-people-studio.md).
+    @GET("characters/{id}/full")
+    suspend fun getCharacterFull(@Path("id") id: Int): JikanResponse<CharacterFullDto>
 
     @GET("anime/{id}/recommendations")
     suspend fun getRecommendations(@Path("id") id: Int): JikanListResponse<RecommendationEntryDto>

@@ -23,6 +23,9 @@ data class CharactersState(
 sealed interface CharactersEvent {
     data class OnQueryChange(val query: String) : CharactersEvent
     data object OnRetry : CharactersEvent
+    data class OnCharacterClick(val characterId: Int) : CharactersEvent
 }
 
-sealed interface CharactersEffect
+sealed interface CharactersEffect {
+    data class NavigateToCharacterDetail(val characterId: Int) : CharactersEffect
+}

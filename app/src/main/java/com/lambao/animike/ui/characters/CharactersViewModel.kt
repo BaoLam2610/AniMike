@@ -41,6 +41,8 @@ class CharactersViewModel @Inject constructor(
                     load(force = true)
                 }
             }
+
+            is CharactersEvent.OnCharacterClick -> sendEffect(CharactersEffect.NavigateToCharacterDetail(event.characterId))
         }
     }
 

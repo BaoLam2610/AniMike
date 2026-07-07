@@ -97,6 +97,7 @@ import com.lambao.animike.domain.model.RelationGroup
 import com.lambao.animike.domain.model.StreamingLink
 import com.lambao.animike.ui.components.AnimeCard
 import com.lambao.animike.ui.components.BackButton
+import com.lambao.animike.ui.components.ExpandableText
 import com.lambao.animike.ui.components.ReviewCard
 import com.lambao.animike.ui.theme.Dimens
 import com.lambao.animike.ui.theme.Motion
@@ -110,6 +111,7 @@ fun DetailScreen(
     onNavigateToDetail: (Int) -> Unit,
     onNavigateToEpisodes: (Int) -> Unit,
     onNavigateToCharacters: (Int) -> Unit,
+    onNavigateToCharacterDetail: (Int) -> Unit,
     onNavigateToReviews: (Int) -> Unit,
     onNavigateToReviewDetail: () -> Unit,
     viewModel: DetailViewModel = hiltViewModel(),
@@ -173,6 +175,7 @@ fun DetailScreen(
                 is DetailEffect.NavigateToDetail -> onNavigateToDetail(effect.malId)
                 is DetailEffect.NavigateToEpisodes -> onNavigateToEpisodes(effect.malId)
                 is DetailEffect.NavigateToCharacters -> onNavigateToCharacters(effect.malId)
+                is DetailEffect.NavigateToCharacterDetail -> onNavigateToCharacterDetail(effect.characterId)
                 is DetailEffect.NavigateToReviews -> onNavigateToReviews(effect.malId)
                 DetailEffect.NavigateToReviewDetail -> onNavigateToReviewDetail()
             }
@@ -386,6 +389,7 @@ private fun DetailContent(
             CharactersSection(
                 characters = characters,
                 onSeeAllClick = { onEvent(DetailEvent.OnSeeAllCharactersClick) },
+                onCharacterClick = { onEvent(DetailEvent.OnCharacterClick(it)) },
             )
         }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
@@ -741,7 +745,11 @@ private const val CHARACTERS_PREVIEW_LIMIT = 15
 // section này "mọc" ra giữa chừng khi đang xem màn; animate cho mượt thay vì
 // giật cứng.
 @Composable
-private fun CharactersSection(characters: List<AnimeCharacter>, onSeeAllClick: () -> Unit) {
+private fun CharactersSection(
+    characters: List<AnimeCharacter>,
+    onSeeAllClick: () -> Unit,
+    onCharacterClick: (Int) -> Unit,
+) {
     AnimatedVisibility(visible = characters.isNotEmpty()) {
         Column {
             Row(
@@ -774,19 +782,23 @@ private fun CharactersSection(characters: List<AnimeCharacter>, onSeeAllClick: (
                 items(
                     characters.take(CHARACTERS_PREVIEW_LIMIT),
                     key = { it.malId },
-                ) { character -> CharacterItem(character) }
+                ) { character ->
+                    CharacterItem(character, onClick = { onCharacterClick(character.malId) })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CharacterItem(character: AnimeCharacter) {
+private fun CharacterItem(character: AnimeCharacter, onClick: () -> Unit) {
     val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
     val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(Dimens.AvatarSize),
+        modifier = Modifier
+            .width(Dimens.AvatarSize)
+            .clickable(onClick = onClick),
     ) {
         AsyncImage(
             model = character.imageUrl,
@@ -1051,38 +1063,6 @@ private fun VideoCard(video: AnimeVideo, onClick: () -> Unit) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-    }
-}
-
-// Dùng chung cho Synopsis + từng dòng Relations — thu gọn N dòng + "Xem
-// thêm"/"Thu gọn", nhưng chỉ hiện nút toggle khi text THỰC SỰ tràn quá
-// maxCollapsedLines (onTextLayout + hasVisualOverflow), tránh hiện "Xem thêm"
-// thừa khi nội dung vốn đã đủ ngắn.
-@Composable
-private fun ExpandableText(text: String, modifier: Modifier = Modifier, maxCollapsedLines: Int = 3) {
-    var expanded by remember { mutableStateOf(false) }
-    var isOverflowing by remember { mutableStateOf(false) }
-    // animateContentSize(): chiều cao Column đổi mượt khi maxLines đổi (thay
-    // vì "giật" cứng) lúc bấm Xem thêm/Thu gọn.
-    Column(modifier = modifier.animateContentSize()) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = if (expanded) Int.MAX_VALUE else maxCollapsedLines,
-            overflow = TextOverflow.Ellipsis,
-            onTextLayout = { result -> if (!expanded) isOverflowing = result.hasVisualOverflow },
-        )
-        if (isOverflowing) {
-            Text(
-                text = if (expanded) "Thu gọn" else "Xem thêm",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier
-                    .padding(top = Dimens.SpaceXs)
-                    .clickable { expanded = !expanded },
-            )
-        }
     }
 }
 

@@ -37,6 +37,12 @@ Base URL: `https://api.jikan.moe/v4` — không cần API key, **chỉ đọc** 
 | Ảnh | `GET /anime/{id}/pictures` |
 | Thể loại | `GET /genres/anime` |
 | Random | `GET /random/anime` |
+| Top nhân vật | `GET /top/characters?page=` (pagination chuẩn, sort theo `favorites` giảm dần) |
+| Chi tiết nhân vật | `GET /characters/{id}/full` (không pagination — xem chi tiết ở `references/mvp5-characters-people-studio.md`) |
+| Chi tiết người/seiyuu | `GET /people/{id}/full` (không pagination, `voices[]` có thể vài trăm item → local-filter, không Paging) |
+| Staff của 1 anime | `GET /anime/{id}/staff` (không có field `pagination`) |
+| Chi tiết studio | `GET /producers/{id}/full` (không kèm list anime) |
+| Anime của 1 studio | `GET /anime?producers={id}&page=` (dùng lại `searchAnime`, pagination thật) |
 
 ## Cấu trúc response
 

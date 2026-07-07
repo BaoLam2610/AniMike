@@ -8,7 +8,10 @@ import com.lambao.animike.data.local.dao.AnimeListDao
 import com.lambao.animike.data.local.dao.AnimeStatisticsDao
 import com.lambao.animike.data.local.dao.AnimeThemesDao
 import com.lambao.animike.data.local.dao.AnimeVideoDao
+import com.lambao.animike.data.local.dao.CharacterAnimeAppearanceDao
 import com.lambao.animike.data.local.dao.CharacterDao
+import com.lambao.animike.data.local.dao.CharacterDetailDao
+import com.lambao.animike.data.local.dao.CharacterVoiceActorDao
 import com.lambao.animike.data.local.dao.CommunityRecommendationDao
 import com.lambao.animike.data.local.dao.FavoriteDao
 import com.lambao.animike.data.local.dao.GenreDao
@@ -82,4 +85,15 @@ object DatabaseModule {
 
     @Provides
     fun provideAnimeVideoDao(database: AppDatabase): AnimeVideoDao = database.animeVideoDao()
+
+    @Provides
+    fun provideCharacterDetailDao(database: AppDatabase): CharacterDetailDao = database.characterDetailDao()
+
+    @Provides
+    fun provideCharacterAnimeAppearanceDao(database: AppDatabase): CharacterAnimeAppearanceDao =
+        database.characterAnimeAppearanceDao()
+
+    @Provides
+    fun provideCharacterVoiceActorDao(database: AppDatabase): CharacterVoiceActorDao =
+        database.characterVoiceActorDao()
 }

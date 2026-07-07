@@ -7,7 +7,10 @@ import com.lambao.animike.data.local.dao.AnimeListDao
 import com.lambao.animike.data.local.dao.AnimeStatisticsDao
 import com.lambao.animike.data.local.dao.AnimeThemesDao
 import com.lambao.animike.data.local.dao.AnimeVideoDao
+import com.lambao.animike.data.local.dao.CharacterAnimeAppearanceDao
 import com.lambao.animike.data.local.dao.CharacterDao
+import com.lambao.animike.data.local.dao.CharacterDetailDao
+import com.lambao.animike.data.local.dao.CharacterVoiceActorDao
 import com.lambao.animike.data.local.dao.CommunityRecommendationDao
 import com.lambao.animike.data.local.dao.FavoriteDao
 import com.lambao.animike.data.local.dao.GenreDao
@@ -21,7 +24,10 @@ import com.lambao.animike.data.local.entity.CachedAnimeListEntity
 import com.lambao.animike.data.local.entity.CachedAnimeStatisticsEntity
 import com.lambao.animike.data.local.entity.CachedAnimeThemesEntity
 import com.lambao.animike.data.local.entity.CachedAnimeVideoEntity
+import com.lambao.animike.data.local.entity.CachedCharacterAnimeAppearanceEntity
+import com.lambao.animike.data.local.entity.CachedCharacterDetailEntity
 import com.lambao.animike.data.local.entity.CachedCharacterEntity
+import com.lambao.animike.data.local.entity.CachedCharacterVoiceActorEntity
 import com.lambao.animike.data.local.entity.CachedCommunityRecommendationEntity
 import com.lambao.animike.data.local.entity.CachedGenreEntity
 import com.lambao.animike.data.local.entity.CachedNewEpisodeEntity
@@ -47,8 +53,11 @@ import com.lambao.animike.data.local.entity.FavoriteEntity
         CachedAnimeThemesEntity::class,
         CachedStreamingLinkEntity::class,
         CachedAnimeVideoEntity::class,
+        CachedCharacterDetailEntity::class,
+        CachedCharacterAnimeAppearanceEntity::class,
+        CachedCharacterVoiceActorEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -66,4 +75,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun animeThemesDao(): AnimeThemesDao
     abstract fun streamingLinkDao(): StreamingLinkDao
     abstract fun animeVideoDao(): AnimeVideoDao
+    abstract fun characterDetailDao(): CharacterDetailDao
+    abstract fun characterAnimeAppearanceDao(): CharacterAnimeAppearanceDao
+    abstract fun characterVoiceActorDao(): CharacterVoiceActorDao
 }
