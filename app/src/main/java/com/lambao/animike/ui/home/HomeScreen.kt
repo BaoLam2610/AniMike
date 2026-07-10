@@ -62,6 +62,7 @@ import com.lambao.animike.ui.components.AnimeCard
 import com.lambao.animike.ui.components.AnimeCardPlaceholder
 import com.lambao.animike.ui.components.CommunityRecommendationCard
 import com.lambao.animike.ui.components.NewEpisodeCard
+import com.lambao.animike.ui.components.TopCharacterCard
 import com.lambao.animike.ui.components.rememberShimmerProgress
 import com.lambao.animike.ui.components.shimmerEffect
 import com.lambao.animike.ui.theme.AniMikeTheme
@@ -85,6 +86,8 @@ fun HomeScreen(
     onNavigateToAnimeList: (AnimeListSource) -> Unit,
     onNavigateToNewEpisodes: () -> Unit,
     onNavigateToCommunityRecommendations: () -> Unit,
+    onNavigateToCharacterDetail: (Int) -> Unit,
+    onNavigateToTopCharacters: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -97,6 +100,8 @@ fun HomeScreen(
                 HomeEffect.NavigateToUpcoming -> onNavigateToAnimeList(AnimeListSource.UPCOMING)
                 HomeEffect.NavigateToNewEpisodes -> onNavigateToNewEpisodes()
                 HomeEffect.NavigateToCommunityRecommendations -> onNavigateToCommunityRecommendations()
+                is HomeEffect.NavigateToCharacterDetail -> onNavigateToCharacterDetail(effect.characterId)
+                HomeEffect.NavigateToTopCharacters -> onNavigateToTopCharacters()
             }
         }
     }
@@ -203,6 +208,14 @@ private fun HomeScreenContent(
                             onRetry = { onEvent(HomeEvent.OnRetryCommunityRecommendations) },
                             onAnimeClick = { onEvent(HomeEvent.OnAnimeClick(it)) },
                             onSeeAllClick = { onEvent(HomeEvent.OnSeeAllCommunityRecommendationsClick) },
+                        )
+                    }
+                    item {
+                        TopCharactersSection(
+                            section = state.topCharacters,
+                            onRetry = { onEvent(HomeEvent.OnRetryTopCharacters) },
+                            onCharacterClick = { onEvent(HomeEvent.OnCharacterClick(it)) },
+                            onSeeAllClick = { onEvent(HomeEvent.OnSeeAllTopCharactersClick) },
                         )
                     }
                 }
@@ -696,6 +709,79 @@ private fun CommunityRecommendationsSection(
                                 .clip(RoundedCornerShape(Dimens.RadiusCard))
                                 .shimmerEffect(shimmerProgress),
                         )
+                    }
+                }
+            }
+
+            section.error != null -> SectionError(message = section.error, onRetry = onRetry)
+
+            else -> Text(
+                text = "Chưa có dữ liệu",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+            )
+        }
+    }
+}
+
+// MVP5 "Nhân vật nổi bật" (/top/characters) — cùng cấu trúc header/preview/
+// loading/error với các section khác, dùng TopCharacterCard (ảnh dọc 2:3 +
+// badge favorites, KHÔNG ribbon hạng ở preview Home — ribbon chỉ ở lưới "Xem
+// tất cả"). Bấm 1 nhân vật mở thẳng Character Detail (không phải Anime Detail).
+@Composable
+private fun TopCharactersSection(
+    section: TopCharacterSectionState,
+    onRetry: () -> Unit,
+    onCharacterClick: (Int) -> Unit,
+    onSeeAllClick: () -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dimens.ScreenPadding),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Nhân vật nổi bật",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f),
+            )
+            if (section.characters.size > SECTION_PREVIEW_LIMIT) {
+                Text(
+                    text = "Xem tất cả",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .clickable(onClick = onSeeAllClick)
+                        .padding(Dimens.SpaceXs),
+                )
+            }
+        }
+        when {
+            section.characters.isNotEmpty() -> LazyRow(
+                contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
+            ) {
+                items(section.characters.take(SECTION_PREVIEW_LIMIT), key = { it.malId }) { character ->
+                    TopCharacterCard(
+                        character = character,
+                        onClick = { onCharacterClick(character.malId) },
+                        modifier = Modifier.width(Dimens.CardWidth),
+                    )
+                }
+            }
+
+            section.isLoading -> {
+                val shimmerProgress = rememberShimmerProgress()
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
+                ) {
+                    items(6, key = { it }) {
+                        AnimeCardPlaceholder(progress = shimmerProgress, modifier = Modifier.width(Dimens.CardWidth))
                     }
                 }
             }

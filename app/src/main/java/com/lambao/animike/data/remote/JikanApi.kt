@@ -13,12 +13,14 @@ import com.lambao.animike.data.remote.dto.ImagesDto
 import com.lambao.animike.data.remote.dto.JikanListResponse
 import com.lambao.animike.data.remote.dto.JikanResponse
 import com.lambao.animike.data.remote.dto.PersonFullDto
+import com.lambao.animike.data.remote.dto.ProducerFullDto
 import com.lambao.animike.data.remote.dto.RecommendationEntryDto
 import com.lambao.animike.data.remote.dto.RecommendationPairDto
 import com.lambao.animike.data.remote.dto.ReviewDto
 import com.lambao.animike.data.remote.dto.SeasonYearDto
 import com.lambao.animike.data.remote.dto.StaffEntryDto
 import com.lambao.animike.data.remote.dto.StreamingLinkDto
+import com.lambao.animike.data.remote.dto.TopCharacterDto
 import com.lambao.animike.data.remote.dto.WatchEpisodeEntryDto
 import retrofit2.http.GET
 import retrofit2.http.Path
@@ -102,6 +104,10 @@ interface JikanApi {
         @Query("sort") sort: String? = null,
         @Query("start_date") startDate: String? = null,
         @Query("end_date") endDate: String? = null,
+        // MVP5 Studio Detail — lọc anime theo studio (verify: pagination thật,
+        // xem references/mvp5-characters-people-studio.md). Null ở mọi call
+        // search thường, chỉ StudioAnimePagingSource truyền id.
+        @Query("producers") producers: Int? = null,
     ): JikanListResponse<AnimeDto>
 
     @GET("genres/anime")
@@ -150,4 +156,14 @@ interface JikanApi {
     // MVP5 "Ê-kíp sản xuất" ở Detail — response KHÔNG có field `pagination`.
     @GET("anime/{id}/staff")
     suspend fun getAnimeStaff(@Path("id") id: Int): JikanListResponse<StaffEntryDto>
+
+    // MVP5 Studio Detail — 1 object/studio (không phân trang). KHÔNG kèm list
+    // anime (gọi riêng qua searchAnime(producers=id)).
+    @GET("producers/{id}/full")
+    suspend fun getProducerFull(@Path("id") id: Int): JikanResponse<ProducerFullDto>
+
+    // MVP5 "Top nhân vật" — pagination CHUẨN (25/trang, sort favorites giảm
+    // dần), verify references/mvp5-characters-people-studio.md.
+    @GET("top/characters")
+    suspend fun getTopCharacters(@Query("page") page: Int = 1): JikanListResponse<TopCharacterDto>
 }

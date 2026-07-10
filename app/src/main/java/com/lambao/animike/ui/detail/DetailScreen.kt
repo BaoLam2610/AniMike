@@ -96,10 +96,12 @@ import com.lambao.animike.domain.model.Episode
 import com.lambao.animike.domain.model.Picture
 import com.lambao.animike.domain.model.RelationGroup
 import com.lambao.animike.domain.model.StreamingLink
+import com.lambao.animike.domain.model.Studio
 import com.lambao.animike.ui.components.AnimeCard
 import com.lambao.animike.ui.components.BackButton
 import com.lambao.animike.ui.components.ExpandableText
 import com.lambao.animike.ui.components.ReviewCard
+import com.lambao.animike.ui.components.ScrollToTopButton
 import com.lambao.animike.ui.theme.Dimens
 import com.lambao.animike.ui.theme.Motion
 import com.lambao.animike.ui.theme.success
@@ -114,6 +116,7 @@ fun DetailScreen(
     onNavigateToCharacters: (Int) -> Unit,
     onNavigateToCharacterDetail: (Int) -> Unit,
     onNavigateToPersonDetail: (Int) -> Unit,
+    onNavigateToStudioDetail: (Int) -> Unit,
     onNavigateToReviews: (Int) -> Unit,
     onNavigateToReviewDetail: () -> Unit,
     viewModel: DetailViewModel = hiltViewModel(),
@@ -179,6 +182,7 @@ fun DetailScreen(
                 is DetailEffect.NavigateToCharacters -> onNavigateToCharacters(effect.malId)
                 is DetailEffect.NavigateToCharacterDetail -> onNavigateToCharacterDetail(effect.characterId)
                 is DetailEffect.NavigateToPersonDetail -> onNavigateToPersonDetail(effect.personMalId)
+                is DetailEffect.NavigateToStudioDetail -> onNavigateToStudioDetail(effect.studioMalId)
                 is DetailEffect.NavigateToReviews -> onNavigateToReviews(effect.malId)
                 DetailEffect.NavigateToReviewDetail -> onNavigateToReviewDetail()
             }
@@ -360,6 +364,17 @@ private fun DetailContent(
             item { GenreChips(genres = detail.genres) }
         }
 
+        // Studio ngay dưới genres (cùng nhóm "thông tin mô tả phim") — chip
+        // bấm được mở Studio Detail (MVP5).
+        if (detail.studios.isNotEmpty()) {
+            item {
+                StudiosRow(
+                    studios = detail.studios,
+                    onStudioClick = { onEvent(DetailEvent.OnStudioClick(it)) },
+                )
+            }
+        }
+
         // "Xem trên..." đặt ngay dưới genres, trước trailer — hành động chính
         // của người muốn XEM phim (khác các section thông tin bên dưới), càng
         // gần đầu càng dễ thấy; chỉ 1 hàng chip cuộn ngang nên không làm dài
@@ -496,11 +511,12 @@ private fun HeroHeader(detail: AnimeDetail) {
     }
 }
 
+// Studio ĐÃ TÁCH khỏi meta line (MVP5) — giờ là chip bấm được (StudiosRow)
+// dưới GenreChips, không còn nhồi vào chuỗi text này.
 private fun detailMetaLine(detail: AnimeDetail): String = listOfNotNull(
     detail.type,
     detail.year?.toString(),
     detail.episodes?.let { "$it tập" },
-    detail.studios.takeIf { it != "N/A" },
 ).joinToString(" · ")
 
 // Style riêng cho hero header (nền surface alpha 80% đè trên ảnh cover, không
@@ -557,29 +573,6 @@ private fun FavoriteButton(isFavorite: Boolean, onClick: () -> Unit, modifier: M
     }
 }
 
-// Nút nổi "cuộn lên đầu" (thay cho thu gọn/xem thêm ở tab Nhạc phim — theo
-// yêu cầu user) — nền primary (khác BackButton/FavoriteButton dùng nền
-// surface bán trong suốt vì 2 nút đó luôn nổi trên Hero, còn nút này nổi
-// trên nội dung cuộn nên cần tương phản mạnh hơn để không lẫn vào nền).
-@Composable
-private fun ScrollToTopButton(onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .size(Dimens.IconButtonSize)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = "Cuộn lên đầu trang" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "↑",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onPrimary,
-        )
-    }
-}
-
 @Composable
 private fun GenreChips(genres: List<String>) {
     LazyRow(
@@ -598,6 +591,50 @@ private fun GenreChips(genres: List<String>) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+// MVP5 — hàng chip studio bấm được (mở Studio Detail). Chip nền primary-nhạt
+// + chữ primary như StreamingLinksRow để báo hiệu bấm được (khác GenreChips
+// surfaceVariant thuần hiển thị).
+@Composable
+private fun StudiosRow(studios: List<Studio>, onStudioClick: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+    ) {
+        Text(
+            text = "Studio:",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        LazyRow(
+            contentPadding = PaddingValues(vertical = Dimens.SpaceSm),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+        ) {
+            items(studios, key = { it.malId }) { studio ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Dimens.RadiusChip))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                        .clickable(
+                            onClickLabel = "Mở studio ${studio.name}",
+                            role = Role.Button,
+                            onClick = { onStudioClick(studio.malId) },
+                        )
+                        .padding(horizontal = Dimens.SpaceMd, vertical = Dimens.SpaceXs),
+                ) {
+                    Text(
+                        text = studio.name,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         }
     }

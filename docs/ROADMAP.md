@@ -1,7 +1,7 @@
 # AniMike — Roadmap & Quy trình phát triển
 
 Hiện trạng project: Kotlin + Jetpack Compose (Material 3), minSdk 24, targetSdk 36.
-Đã hoàn thành Phase 0a → MVP 4 (Khám phá) — tiếp theo là MVP 5 (Nhân vật / Người / Studio).
+Đã hoàn thành Phase 0a → MVP 5 (Nhân vật / Người / Studio) — tiếp theo là MVP 6 (Tracking local).
 
 **Skills & agents đã cài trong `.claude/`** (Claude Code tự nhận, xem `CLAUDE.md` ở root):
 - `skills/compose-expert` — guide Compose chuyên sâu (24 references + source androidx)
@@ -523,10 +523,9 @@ nhất" chứ không theo thứ tự liệt kê gốc trong roadmap:
     541 item phải nằm trong `items()` của chính `LazyColumn` ngoài cùng để lazy
     load/recycle thật sự; bọc trong `AnimatedContent` sẽ ép compose hết 1 lần,
     mất lợi ích lazy. Đánh đổi: mất hiệu ứng chuyển tab, giữ hiệu năng.
-  - **Duo thumbnail** cho mỗi dòng vai diễn: poster anime (2:3 thu nhỏ) +
-    avatar nhân vật đè góc dưới-phải (viền màu nền tạo cảm giác "cắt dán") —
-    thay vì avatar đơn điệu, cho thấy ngay CẢ nhân vật lẫn bộ phim trong 1 cái
-    nhìn.
+  - **(Đã thay bằng nhóm theo anime — xem "Cải tiến sau khi dùng thử" bên
+    dưới)** ~~Duo thumbnail cho mỗi dòng vai diễn: poster anime (2:3 thu nhỏ) +
+    avatar nhân vật đè góc dưới-phải~~.
   - Kiến trúc: `PersonDetailRepository` riêng (khoá `personMalId`, KHÁC
     `malId`/`characterId`) — áp dụng NGAY bài học atomicity từ Character
     Detail: 3 bảng Room (core + 2 list, KHÔNG sentinel row) ghi trong 1
@@ -553,24 +552,90 @@ nhất" chứ không theo thứ tự liệt kê gốc trong roadmap:
       AnimatedContent ở trên) nên đổi tab không tự cuộn về đầu — cuộn sâu ở
       tab 541 item rồi đổi sang tab ~15 item sẽ bị clamp/lạc vị trí. Sửa bằng
       `LaunchedEffect(effectiveTab) { listState.animateScrollToItem(0) }`.
-- [ ] **3. Studio Detail** (`/producers/{id}/full`) — bấm tên studio ở Detail
-  để mở. Cần đổi `AnimeDetail.studios` từ `String` đã join sẵn sang list có
-  `mal_id` (đã xác nhận field hiện tại không mang id) — việc này tách biệt 2
-  mục trên nên xếp sau khi đã quen nhịp 2 detail screen kia. Thiết kế: logo
-  làm điểm nhấn (không phải cover full-bleed, vì logo thường nền trong
-  suốt/vuông) đặt trên card `surface` giữa màn, quanh đó là `established` +
-  tổng `count` anime + chip link `external[]`. Danh sách anime đã sản xuất
-  TÁI DÙNG `searchAnime` Paging 3 có sẵn, chỉ thêm query `producers={id}` (đã
-  verify pagination thật qua `/anime?producers=1`, KHÔNG cần endpoint/DTO mới).
-- [ ] **4. "Top nhân vật"** (`/top/characters`, discovery) — xếp CUỐI vì đây
-  là màn DUY NHẤT không có entry point sẵn trong app (cần quyết định đặt ở
-  đâu — Home? tab riêng? Search?), và chỉ có ý nghĩa khi Character Detail (mục
-  1) đã tồn tại để điều hướng tới khi bấm 1 nhân vật trong danh sách. Thiết
-  kế: lưới portrait 2 cột (khác 3 cột AnimeCard vì ảnh nhân vật dọc hơn), rank
-  ribbon top-3 (vàng/bạc/đồng) không phá quy tắc 1-accent-per-context vì là
-  ribbon xếp hạng chứ không phải accent UI, hiện `favorites` dạng "❤ 180K" góc
-  dưới. Pagination thật (`last_visible_page: 3254` cho 81329 item) → Paging 3
-  chuẩn.
+  - **Cải tiến sau khi dùng thử (user góp ý, 2026-07)**:
+    - **Ngày sinh format dd/MM/yyyy** — `PersonDetailMapper.formatBirthday()`
+      (cùng kỹ thuật `ReviewMapper.formatReviewDate`, `SimpleDateFormat`
+      không thread-safe nên tạo instance mới mỗi lần gọi).
+    - **"Vai trò sản xuất" đổi từ `LazyRow` ngang sang lưới dọc 3 cột** — chunked
+      thành từng hàng, mỗi hàng vẫn là 1 `item{}` riêng của chính `LazyColumn`
+      ngoài cùng (KHÔNG lồng `LazyVerticalGrid` vào `LazyColumn` — vi phạm
+      nested scrollable), giữ lazy theo hàng.
+    - **Nút nổi "cuộn lên đầu" cho CẢ 2 tab** — trích `ScrollToTopButton` từ
+      `DetailScreen.kt` (trước đó `private`) thành component dùng chung ở
+      `ui/components/` (2 nơi dùng). Áp dụng tự nhiên cho cả 2 tab vì dùng
+      chung 1 `listState`/`LazyColumn`, không cần code riêng cho từng tab.
+    - **"Vai diễn lồng tiếng" nhóm theo anime + sort Chính→Phụ** — thay hẳn
+      "duo thumbnail" (poster+avatar đè) bằng bố cục nhóm: header hiện poster+
+      tên anime 1 LẦN, các dòng nhân vật bên dưới (đã sort Main trước
+      Supporting) không lặp lại ảnh/tên anime nữa. Model mới `VoiceRoleGroup`
+      + computed `PersonDetailState.groupedVoiceRoles` (group theo
+      `anime.malId` bằng `LinkedHashMap` giữ thứ tự xuất hiện đầu, `sortedBy`
+      ổn định trong nhóm).
+    - **Ô tìm kiếm ẩn khi danh sách ngắn** — chỉ hiện khi `voiceRoles.size >= 15`
+      (dùng size GỐC, không phải đã lọc, để ô không biến mất giữa chừng lúc
+      gõ). Khi focus, `BringIntoViewRequester` tự cuộn `LazyColumn` cha đẩy ô
+      lên trên (kết hợp `Modifier.imePadding()` ở Box ngoài cùng để tính đúng
+      khoảng bàn phím che) — tránh bàn phím che mất danh sách bên dưới.
+- [x] **3. Studio Detail** (`/producers/{id}/full`) ✅ — bấm chip studio ở
+  Detail để mở. Phần "nặng" nhất: phải đổi `AnimeDetail.studios` từ `String`
+  join sẵn → `List<Studio>` (Studio = malId + name) để bấm được:
+  - Chuỗi thay đổi: `NamedResourceDto` thêm `mal_id` (nullable, genres cũng
+    dùng DTO này nhưng chỉ đọc name nên không ảnh hưởng) → `AnimeDetailMapper`
+    lọc studio đủ malId+name → `CachedAnimeDetailEntity.studios: String` đổi
+    thành `studiosEncoded` (mỗi studio "malId:::name" nối `~~~`, cùng kỹ thuật
+    relations) → DB version 14→15. Ở Detail, studio TÁCH khỏi `detailMetaLine`
+    (chuỗi text) thành `StudiosRow` chip bấm được (nền primary-nhạt như
+    StreamingLinksRow) đặt ngay dưới GenreChips.
+  - Thiết kế màn Studio Detail: **logo làm điểm nhấn** (KHÁC hero ảnh
+    full-bleed của Character/Person Detail) — logo studio thường nền trong
+    suốt/vuông nên đặt trên card `surface` bo góc + `ContentScale.Fit` (không
+    Crop, tránh méo logo), căn giữa. Dưới logo: tên studio + **stat row** 3
+    chip (🎬 count anime / 📅 Est. năm / ♥ favorites, ẩn chip thiếu data) +
+    hàng chip link `external[]` (🔗, bấm mở browser ngoài qua
+    `OpenExternalUrl`, URL đã lọc http/https ở mapper) + `about` thu gọn/xem
+    thêm (`ExpandableText`).
+  - Danh sách anime studio sản xuất: **TÁI DÙNG `searchAnime` + `producers={id}`**
+    (chỉ thêm 1 query param, KHÔNG endpoint/DTO mới) qua
+    `StudioAnimePagingSource` (Paging 3, khuôn `AnimeSearchPagingSource`).
+    Header (logo/stat/external/about) là các item **full-span** ĐẦU của chính
+    `LazyVerticalGrid` 3 cột chứa anime — cuộn cùng lưới (pattern ReviewsScreen:
+    header là item đầu của list paged), tự xử lý loading/empty/error/append.
+  - Kiến trúc: `StudioDetailRepository` CHỈ 1 bảng core `cached_studio_detail`
+    (SWR, TTL 7 ngày `STUDIO_DETAIL_MS`) — KHÔNG có bảng list như Character/
+    Person Detail vì danh sách anime đi Paging (không cache), nên cũng không
+    cần transaction đa-bảng. Route `studio/{studioId}` (arg riêng, aggregate
+    thứ 4). Điều hướng dùng `navigateToStudioDetail` (cùng `navigateOrPopToExisting`
+    dedup — studio→anime→studio cũng có thể lặp như các cặp khác).
+  - Review clean (không blocker). Sửa 1 a11y: `StatChip` thêm
+    `clearAndSetSemantics { contentDescription }` để TalkBack đọc câu đủ nghĩa
+    ("6393 lượt thích") thay vì ghép glyph emoji thô ("trái tim, 6393").
+    **Nhận biết + chấp nhận có ý thức**: `StudioAnimePagingSource` chỉ
+    `distinctBy { malId }` TRONG 1 trang (không cross-page) — nếu Jikan search
+    trả trùng mal_id giữa 2 trang, `itemKey { malId }` có thể "key already
+    used". Đây là rủi ro CÓ SẴN, dùng chung với `AnimeSearchPagingSource`
+    (Search/Season/Schedule) — không sửa riêng ở đây để không lệch pattern;
+    khi làm nên fix cross-page cho CẢ cụm search paging 1 lần.
+- [x] **4. "Top nhân vật"** (`/top/characters`, discovery) ✅ — **Entry point:
+  section "Nhân vật nổi bật" trên Home** (user chọn phương án này thay vì tab
+  riêng/Search — nhất quán với "Đề xuất cộng đồng"/"Tập mới", không phá giới
+  hạn 3-4 tab của animike-design). Home preview: hàng ngang SWR + Room cache
+  (`cached_top_character`, 1 feed toàn cục giống New Episodes, page 1 cắt còn
+  15, TTL 24h `TOP_CHARACTERS_MS`); "Xem tất cả" mở `TopCharactersScreen`
+  (Paging 3 — endpoint phân trang thật, 3254 trang). Bấm 1 nhân vật (cả
+  preview lẫn lưới) mở thẳng Character Detail (mục 1, đã có).
+  - Thiết kế: lưới portrait **2 cột** (khác 3 cột AnimePagingGrid vì ảnh nhân
+    vật dọc hơn), **rank ribbon top-3** (huy hiệu vàng/bạc/đồng "#1/#2/#3" —
+    thêm token `rankGold/rankSilver/rankBronze` vào Color.kt/Theme.kt như
+    `success`, KHÔNG hardcode; không phá quy tắc 1-accent vì là màu ngữ nghĩa
+    medal), badge `favorites` "♥ 180K" (format rút gọn K/M) overlay góc
+    dưới-trái ảnh. `TopCharacterCard` dùng CHUNG Home preview + lưới (rank=null
+    ở preview → ẩn ribbon).
+  - `TopCharactersPagingSource` khử trùng malId **XUYÊN trang** (`seenIds`,
+    pattern `CommunityRecommendationsPagingSource`) — tránh "key already used".
+    DB version 15→16. Route `topCharacters` (không arg, feed toàn cục).
+
+**→ MVP 5 (Nhân vật / Người / Studio) HOÀN THÀNH ✅** — 4/4 màn: Character
+Detail, People/Seiyuu Detail, Studio Detail, Top nhân vật. Tiếp theo: MVP 6.
 
 ### MVP 6 — Tracking local
 - [ ] Trạng thái xem: Đang xem / Đã xem / Tạm dừng / Bỏ / Dự định xem (Room)

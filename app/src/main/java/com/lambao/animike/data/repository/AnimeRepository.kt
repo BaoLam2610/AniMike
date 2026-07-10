@@ -7,6 +7,7 @@ import com.lambao.animike.data.local.dao.AnimeDetailDao
 import com.lambao.animike.data.local.dao.AnimeListDao
 import com.lambao.animike.data.local.dao.CommunityRecommendationDao
 import com.lambao.animike.data.local.dao.NewEpisodeDao
+import com.lambao.animike.data.local.dao.TopCharacterDao
 import com.lambao.animike.data.local.entity.AnimeListKey
 import com.lambao.animike.data.local.isExpired
 import com.lambao.animike.data.remote.JikanApi
@@ -19,11 +20,16 @@ import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeListSource
 import com.lambao.animike.domain.model.CommunityRecommendation
 import com.lambao.animike.domain.model.NewEpisodeRelease
+import com.lambao.animike.domain.model.TopCharacter
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 private const val TAG = "AnimeRepository"
+
+// Preview Home "Nhân vật nổi bật" — page 1 (/top/characters) trả 25 item,
+// cắt còn 15 cho hàng ngang preview (giống các preview Home khác).
+private const val TOP_CHARACTERS_PREVIEW_LIMIT = 15
 
 interface AnimeRepository {
     fun observeSeasonNow(): Flow<List<Anime>>
@@ -53,6 +59,13 @@ interface AnimeRepository {
     fun observeCommunityRecommendations(): Flow<List<CommunityRecommendation>>
     suspend fun refreshCommunityRecommendations(force: Boolean = false): ApiResult<Unit>
     fun communityRecommendationsPagingSource(): PagingSource<Int, CommunityRecommendation>
+
+    // MVP5 "Top nhân vật" (/top/characters) — preview Home dùng SWR Room (page
+    // 1, cắt còn TOP_CHARACTERS_PREVIEW_LIMIT), "Xem tất cả" dùng Paging 3
+    // riêng (endpoint phân trang THẬT).
+    fun observeTopCharacters(): Flow<List<TopCharacter>>
+    suspend fun refreshTopCharacters(force: Boolean = false): ApiResult<Unit>
+    fun topCharactersPagingSource(): PagingSource<Int, TopCharacter>
 }
 
 class AnimeRepositoryImpl @Inject constructor(
@@ -61,6 +74,7 @@ class AnimeRepositoryImpl @Inject constructor(
     private val animeDetailDao: AnimeDetailDao,
     private val newEpisodeDao: NewEpisodeDao,
     private val communityRecommendationDao: CommunityRecommendationDao,
+    private val topCharacterDao: TopCharacterDao,
 ) : AnimeRepository {
 
     override fun observeSeasonNow(): Flow<List<Anime>> = observeList(AnimeListKey.SEASON_NOW)
@@ -141,6 +155,32 @@ class AnimeRepositoryImpl @Inject constructor(
 
     override fun communityRecommendationsPagingSource(): PagingSource<Int, CommunityRecommendation> =
         CommunityRecommendationsPagingSource(api)
+
+    override fun observeTopCharacters(): Flow<List<TopCharacter>> =
+        topCharacterDao.observeAll().map { entities -> entities.map { it.toDomain() } }
+
+    override suspend fun refreshTopCharacters(force: Boolean): ApiResult<Unit> {
+        if (!force) {
+            val fetchedAt = topCharacterDao.getFetchedAt()
+            if (fetchedAt != null && !isExpired(fetchedAt, CacheTtl.TOP_CHARACTERS_MS)) {
+                return ApiResult.Success(Unit)
+            }
+        }
+        return safeApiCall {
+            // Chỉ page 1 cho preview Home, cắt còn PREVIEW_LIMIT (giống New
+            // Episodes/Community Recs) — "Xem tất cả" dùng topCharactersPagingSource().
+            val characters = api.getTopCharacters(page = 1).data
+                .map { it.toDomain() }
+                .distinctBy { it.malId }
+                .take(TOP_CHARACTERS_PREVIEW_LIMIT)
+            val fetchedAt = System.currentTimeMillis()
+            val entities = characters.mapIndexed { index, character -> character.toEntity(index, fetchedAt) }
+            topCharacterDao.replaceAll(entities)
+        }
+    }
+
+    override fun topCharactersPagingSource(): PagingSource<Int, TopCharacter> =
+        TopCharactersPagingSource(api)
 
     private fun observeList(listKey: String): Flow<List<Anime>> =
         dao.observeList(listKey).map { entities -> entities.map { it.toDomain() } }

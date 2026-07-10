@@ -44,6 +44,10 @@ Base URL: `https://api.jikan.moe/v4` — không cần API key, **chỉ đọc** 
 | Chi tiết studio | `GET /producers/{id}/full` (không kèm list anime) |
 | Anime của 1 studio | `GET /anime?producers={id}&page=` (dùng lại `searchAnime`, pagination thật) |
 
+**Manga (phase sau):** toàn bộ endpoint manga (`/manga`, `/manga/{id}/full`,
+`/top/manga`, `/genres/manga`, `/recommendations/manga`, sub-resource...) đã gom +
+verify shape ở `references/manga-endpoints.md` — đọc trước khi bắt tay phase Manga.
+
 ## Cấu trúc response
 
 Mọi response bọc trong `data`; list có thêm `pagination`:

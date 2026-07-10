@@ -4,6 +4,7 @@ import com.lambao.animike.data.remote.dto.AnimeFullDto
 import com.lambao.animike.data.remote.dto.TrailerDto
 import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.RelationGroup
+import com.lambao.animike.domain.model.Studio
 import java.util.Locale
 
 // Ký tự hợp lệ của 1 video id YouTube — dùng để validate CẢ field youtube_id
@@ -40,7 +41,13 @@ fun AnimeFullDto.toDomain(): AnimeDetail = AnimeDetail(
     year = year,
     status = status ?: "N/A",
     isAiring = airing ?: false,
-    studios = studios.mapNotNull { it.name }.joinToString(", ").ifBlank { "N/A" },
+    // Chỉ giữ studio có ĐỦ malId + name (bấm được) — bỏ studio thiếu id vì
+    // không mở được /producers/{id}/full. distinctBy phòng Jikan trả trùng.
+    studios = studios.mapNotNull { dto ->
+        val id = dto.malId ?: return@mapNotNull null
+        val name = dto.name?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        Studio(malId = id, name = name)
+    }.distinctBy { it.malId },
     genres = genres.mapNotNull { it.name },
     synopsis = synopsis ?: "Chưa có mô tả.",
     relations = relations.mapNotNull { rel ->

@@ -33,8 +33,12 @@ data class TrailerDto(
     @SerialName("embed_url") val embedUrl: String? = null,
 )
 
+// mal_id thêm cho studios (MVP5 Studio Detail — bấm tên studio ở Detail cần
+// id để mở /producers/{id}/full). Genres cũng dùng DTO này nhưng chỉ đọc
+// name, mal_id nullable nên không ảnh hưởng.
 @Serializable
 data class NamedResourceDto(
+    @SerialName("mal_id") val malId: Int? = null,
     val name: String? = null,
 )
 

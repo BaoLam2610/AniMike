@@ -24,6 +24,8 @@ import com.lambao.animike.data.local.dao.PictureDao
 import com.lambao.animike.data.local.dao.ReviewPreviewDao
 import com.lambao.animike.data.local.dao.SeasonYearDao
 import com.lambao.animike.data.local.dao.StreamingLinkDao
+import com.lambao.animike.data.local.dao.StudioDetailDao
+import com.lambao.animike.data.local.dao.TopCharacterDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -112,4 +114,10 @@ object DatabaseModule {
 
     @Provides
     fun provideAnimeStaffDao(database: AppDatabase): AnimeStaffDao = database.animeStaffDao()
+
+    @Provides
+    fun provideStudioDetailDao(database: AppDatabase): StudioDetailDao = database.studioDetailDao()
+
+    @Provides
+    fun provideTopCharacterDao(database: AppDatabase): TopCharacterDao = database.topCharacterDao()
 }

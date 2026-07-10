@@ -13,3 +13,10 @@ val OnBackground = Color(0xFFE5E9F0)
 val OnSurfaceVariant = Color(0xFF8B93A7)
 val Error = Color(0xFFF87171)
 val Success = Color(0xFF4ADE80)
+
+// Huy hiệu xếp hạng top-3 (MVP5 "Top nhân vật") — vàng/bạc/đồng. Không phá
+// quy tắc "1 accent/ngữ cảnh" của animike-design vì đây là ribbon XẾP HẠNG
+// (ngữ nghĩa cố định như medal), không phải accent UI theo chủ đề.
+val RankGold = Color(0xFFFFD700)
+val RankSilver = Color(0xFFC0C0C0)
+val RankBronze = Color(0xFFCD7F32)

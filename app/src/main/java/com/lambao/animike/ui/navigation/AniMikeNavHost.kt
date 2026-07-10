@@ -48,6 +48,8 @@ import com.lambao.animike.ui.reviews.ReviewsViewModel
 import com.lambao.animike.ui.search.SearchFilterScreen
 import com.lambao.animike.ui.search.SearchScreen
 import com.lambao.animike.ui.search.SearchViewModel
+import com.lambao.animike.ui.studiodetail.StudioDetailScreen
+import com.lambao.animike.ui.topcharacters.TopCharactersScreen
 import com.lambao.animike.ui.theme.Motion
 
 private data class BottomNavItem(val route: String, val label: String, val icon: String)
@@ -82,6 +84,9 @@ private fun NavController.navigateToCharacterDetail(characterId: Int) =
 
 private fun NavController.navigateToPersonDetail(personId: Int) =
     navigateOrPopToExisting(Routes.personDetail(personId))
+
+private fun NavController.navigateToStudioDetail(studioId: Int) =
+    navigateOrPopToExisting(Routes.studioDetail(studioId))
 
 // Polish motion/transition giữa các màn hình (MVP3, mục cuối cùng). 2 loại:
 // - Đổi tab bottom-nav (cả 2 đầu đều là 1 trong 4 route gốc) → crossfade nhẹ,
@@ -225,6 +230,8 @@ fun AniMikeNavHost() {
                     onNavigateToCommunityRecommendations = {
                         navController.navigate(Routes.COMMUNITY_RECOMMENDATIONS)
                     },
+                    onNavigateToCharacterDetail = { characterId -> navController.navigateToCharacterDetail(characterId) },
+                    onNavigateToTopCharacters = { navController.navigate(Routes.TOP_CHARACTERS) },
                 )
             }
             composable(
@@ -247,6 +254,12 @@ fun AniMikeNavHost() {
                 CommunityRecommendationsScreen(
                     onBackClick = navController::popBackStack,
                     onNavigateToDetail = { malId -> navController.navigateToDetail(malId) },
+                )
+            }
+            composable(Routes.TOP_CHARACTERS) {
+                TopCharactersScreen(
+                    onBackClick = navController::popBackStack,
+                    onNavigateToCharacterDetail = { characterId -> navController.navigateToCharacterDetail(characterId) },
                 )
             }
             composable(Routes.SEARCH) { backStackEntry ->
@@ -291,6 +304,7 @@ fun AniMikeNavHost() {
                     onNavigateToCharacters = { malId -> navController.navigate(Routes.characters(malId)) },
                     onNavigateToCharacterDetail = { characterId -> navController.navigateToCharacterDetail(characterId) },
                     onNavigateToPersonDetail = { personId -> navController.navigateToPersonDetail(personId) },
+                    onNavigateToStudioDetail = { studioId -> navController.navigateToStudioDetail(studioId) },
                     onNavigateToReviews = { malId -> navController.navigate(Routes.reviews(malId)) },
                     onNavigateToReviewDetail = { navController.navigate(Routes.DETAIL_REVIEW_DETAIL) },
                     viewModel = hiltViewModel(backStackEntry),
@@ -330,6 +344,16 @@ fun AniMikeNavHost() {
             ) {
                 // personId được PersonDetailViewModel tự đọc qua SavedStateHandle.
                 PersonDetailScreen(
+                    onBackClick = navController::popBackStack,
+                    onNavigateToDetail = { malId -> navController.navigateToDetail(malId) },
+                )
+            }
+            composable(
+                route = Routes.STUDIO_DETAIL,
+                arguments = listOf(navArgument(Routes.STUDIO_DETAIL_ARG_STUDIO_ID) { type = NavType.IntType }),
+            ) {
+                // studioId được StudioDetailViewModel tự đọc qua SavedStateHandle.
+                StudioDetailScreen(
                     onBackClick = navController::popBackStack,
                     onNavigateToDetail = { malId -> navController.navigateToDetail(malId) },
                 )

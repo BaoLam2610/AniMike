@@ -6,6 +6,9 @@ import com.lambao.animike.data.remote.dto.PersonVoiceRefDto
 import com.lambao.animike.domain.model.PersonDetail
 import com.lambao.animike.domain.model.PersonStaffCredit
 import com.lambao.animike.domain.model.PersonVoiceRole
+import java.text.ParseException
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 fun PersonFullDto.toDomain(): PersonDetail = PersonDetail(
     malId = malId,
@@ -16,10 +19,22 @@ fun PersonFullDto.toDomain(): PersonDetail = PersonDetail(
     // distinct(): cùng lý do nicknames ở CharacterDetailMapper — dùng làm
     // LazyRow key nên trùng phần tử sẽ crash.
     alternateNames = alternateNames.distinct(),
-    birthday = birthday,
+    birthday = formatBirthday(birthday),
     favorites = favorites ?: 0,
     about = about,
 )
+
+// Cùng kỹ thuật formatReviewDate của ReviewMapper — SimpleDateFormat không
+// thread-safe nên tạo instance mới mỗi lần gọi (rẻ, mapper chỉ chạy 1 lần/refresh).
+private fun formatBirthday(raw: String?): String? {
+    if (raw == null) return null
+    return try {
+        val parsed = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).parse(raw)
+        if (parsed != null) SimpleDateFormat("dd/MM/yyyy", Locale("vi", "VN")).format(parsed) else raw
+    } catch (e: ParseException) {
+        raw
+    }
+}
 
 // List-level (KHÔNG phải per-item toDomain()) — Jikan trả anime[] dạng PHẲNG
 // {position, anime}, 1 người có thể giữ NHIỀU vai trò trên CÙNG 1 anime (2

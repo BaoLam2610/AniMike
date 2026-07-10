@@ -28,6 +28,10 @@ object Routes {
     // "characterId") — aggregate thứ 3, khoá theo id người.
     const val PERSON_DETAIL = "person/{personId}"
     const val PERSON_DETAIL_ARG_PERSON_ID = "personId"
+    // MVP5 Studio Detail — mở từ chip studio ở Detail. Arg "studioId"
+    // (= producer mal_id) — aggregate thứ 4.
+    const val STUDIO_DETAIL = "studio/{studioId}"
+    const val STUDIO_DETAIL_ARG_STUDIO_ID = "studioId"
     const val REVIEWS = "reviews/{malId}"
     const val REVIEWS_ARG_MAL_ID = "malId"
     // Dùng chung ReviewsViewModel với REVIEWS (giống SEARCH_FILTER/SearchViewModel)
@@ -45,12 +49,15 @@ object Routes {
     const val NEW_EPISODES = "newEpisodes"
     // "Xem tất cả" của "Đề xuất cộng đồng" (MVP4) — không có arg, Paging 3 riêng.
     const val COMMUNITY_RECOMMENDATIONS = "communityRecommendations"
+    // "Xem tất cả" của "Nhân vật nổi bật" (MVP5) — không có arg, Paging 3 riêng.
+    const val TOP_CHARACTERS = "topCharacters"
 
     fun detail(malId: Int) = "detail/$malId"
     fun episodes(malId: Int) = "episodes/$malId"
     fun characters(malId: Int) = "characters/$malId"
     fun characterDetail(characterId: Int) = "character/$characterId"
     fun personDetail(personId: Int) = "person/$personId"
+    fun studioDetail(studioId: Int) = "studio/$studioId"
     fun reviews(malId: Int) = "reviews/$malId"
     // Nhận enum thay vì String thô — compiler bảo đảm route luôn round-trip
     // được qua AnimeListSource.valueOf ở AnimeListViewModel.

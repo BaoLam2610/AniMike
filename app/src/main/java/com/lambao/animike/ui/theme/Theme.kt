@@ -34,6 +34,15 @@ private val AniMikeColorScheme = darkColorScheme(
 val ColorScheme.success: Color
     get() = Success
 
+// Huy hiệu xếp hạng top-3 (MVP5 "Top nhân vật") — ngoài Material colorScheme
+// vì là màu ngữ nghĩa cố định (medal), không map vào role M3 nào.
+val ColorScheme.rankGold: Color
+    get() = RankGold
+val ColorScheme.rankSilver: Color
+    get() = RankSilver
+val ColorScheme.rankBronze: Color
+    get() = RankBronze
+
 // Dark-first: v1 chỉ có dark theme (animike-design SKILL.md)
 @Composable
 fun AniMikeTheme(content: @Composable () -> Unit) {

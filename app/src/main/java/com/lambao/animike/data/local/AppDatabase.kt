@@ -23,6 +23,8 @@ import com.lambao.animike.data.local.dao.PictureDao
 import com.lambao.animike.data.local.dao.ReviewPreviewDao
 import com.lambao.animike.data.local.dao.SeasonYearDao
 import com.lambao.animike.data.local.dao.StreamingLinkDao
+import com.lambao.animike.data.local.dao.StudioDetailDao
+import com.lambao.animike.data.local.dao.TopCharacterDao
 import com.lambao.animike.data.local.entity.CachedAnimeDetailEntity
 import com.lambao.animike.data.local.entity.CachedAnimeListEntity
 import com.lambao.animike.data.local.entity.CachedAnimeStaffMemberEntity
@@ -43,6 +45,8 @@ import com.lambao.animike.data.local.entity.CachedPictureEntity
 import com.lambao.animike.data.local.entity.CachedReviewPreviewEntity
 import com.lambao.animike.data.local.entity.CachedSeasonYearEntity
 import com.lambao.animike.data.local.entity.CachedStreamingLinkEntity
+import com.lambao.animike.data.local.entity.CachedStudioDetailEntity
+import com.lambao.animike.data.local.entity.CachedTopCharacterEntity
 import com.lambao.animike.data.local.entity.FavoriteEntity
 
 @Database(
@@ -68,8 +72,10 @@ import com.lambao.animike.data.local.entity.FavoriteEntity
         CachedPersonStaffCreditEntity::class,
         CachedPersonVoiceRoleEntity::class,
         CachedAnimeStaffMemberEntity::class,
+        CachedStudioDetailEntity::class,
+        CachedTopCharacterEntity::class,
     ],
-    version = 14,
+    version = 16,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -94,4 +100,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun personStaffCreditDao(): PersonStaffCreditDao
     abstract fun personVoiceRoleDao(): PersonVoiceRoleDao
     abstract fun animeStaffDao(): AnimeStaffDao
+    abstract fun studioDetailDao(): StudioDetailDao
+    abstract fun topCharacterDao(): TopCharacterDao
 }

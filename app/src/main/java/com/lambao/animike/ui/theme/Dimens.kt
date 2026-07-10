@@ -66,4 +66,8 @@ object Dimens {
     val VoiceRoleThumbnailWidth = 48.dp
     val VoiceRoleThumbnailHeight = 64.dp
     val VoiceRoleCharacterBadgeSize = 32.dp
+
+    // Logo studio ở Studio Detail (MVP5) — ContentScale.Fit trong card surface,
+    // to hơn AvatarSize vì là điểm nhấn chính của màn.
+    val StudioLogoSize = 120.dp
 }

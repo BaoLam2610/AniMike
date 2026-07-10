@@ -30,6 +30,7 @@ class HomeViewModel @Inject constructor(
     private var upcomingJob: Job? = null
     private var newEpisodesJob: Job? = null
     private var communityRecommendationsJob: Job? = null
+    private var topCharactersJob: Job? = null
 
     // Guard double-tap theo TỪNG anime — hero giờ là slider nhiều trang, dùng
     // 1 job chung sẽ drop nhầm tap hợp lệ trên trang khác khi user vuốt nhanh.
@@ -48,6 +49,7 @@ class HomeViewModel @Inject constructor(
             refreshUpcoming()
             refreshNewEpisodes()
             refreshCommunityRecommendations()
+            refreshTopCharacters()
         }
     }
 
@@ -88,7 +90,8 @@ class HomeViewModel @Inject constructor(
                 val previousUpcoming = upcomingJob
                 val previousNewEpisodes = newEpisodesJob
                 val previousCommunityRecommendations = communityRecommendationsJob
-                // Gán cùng 1 job cho cả 5 biến — nếu user bấm "Thử lại" riêng 1
+                val previousTopCharacters = topCharactersJob
+                // Gán cùng 1 job cho cả 6 biến — nếu user bấm "Thử lại" riêng 1
                 // section trong lúc pull-to-refresh đang chạy, cancelAndJoin sẽ
                 // nhắm đúng job đang chạy thật thay vì job cũ đã xong.
                 val refreshJob = viewModelScope.launch {
@@ -98,11 +101,13 @@ class HomeViewModel @Inject constructor(
                     previousUpcoming?.cancelAndJoin()
                     previousNewEpisodes?.cancelAndJoin()
                     previousCommunityRecommendations?.cancelAndJoin()
+                    previousTopCharacters?.cancelAndJoin()
                     refreshSeasonNow(force = true)
                     refreshTopAnime(force = true)
                     refreshUpcoming(force = true)
                     refreshNewEpisodes(force = true)
                     refreshCommunityRecommendations(force = true)
+                    refreshTopCharacters(force = true)
                     setState { copy(isRefreshing = false) }
                 }
                 seasonNowJob = refreshJob
@@ -110,6 +115,7 @@ class HomeViewModel @Inject constructor(
                 upcomingJob = refreshJob
                 newEpisodesJob = refreshJob
                 communityRecommendationsJob = refreshJob
+                topCharactersJob = refreshJob
             }
 
             is HomeEvent.OnHeroFavoriteClick -> {
@@ -168,6 +174,18 @@ class HomeViewModel @Inject constructor(
 
             HomeEvent.OnSeeAllCommunityRecommendationsClick ->
                 sendEffect(HomeEffect.NavigateToCommunityRecommendations)
+
+            is HomeEvent.OnCharacterClick -> sendEffect(HomeEffect.NavigateToCharacterDetail(event.characterId))
+
+            HomeEvent.OnRetryTopCharacters -> {
+                val previous = topCharactersJob
+                topCharactersJob = viewModelScope.launch {
+                    previous?.cancelAndJoin()
+                    refreshTopCharacters(force = true)
+                }
+            }
+
+            HomeEvent.OnSeeAllTopCharactersClick -> sendEffect(HomeEffect.NavigateToTopCharacters)
         }
     }
 
@@ -195,6 +213,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             repository.observeCommunityRecommendations().collect { list ->
                 setState { copy(communityRecommendations = communityRecommendations.copy(recommendations = list)) }
+            }
+        }
+        viewModelScope.launch {
+            repository.observeTopCharacters().collect { list ->
+                setState { copy(topCharacters = topCharacters.copy(characters = list)) }
             }
         }
     }
@@ -272,6 +295,18 @@ class HomeViewModel @Inject constructor(
                             error = result.error.toUserMessage(),
                         ),
                     )
+                }
+            }
+        }
+    }
+
+    private suspend fun refreshTopCharacters(force: Boolean = false) {
+        setState { copy(topCharacters = topCharacters.copy(isLoading = true, error = null)) }
+        loadMutex.withLock {
+            when (val result = repository.refreshTopCharacters(force)) {
+                is ApiResult.Success -> setState { copy(topCharacters = topCharacters.copy(isLoading = false)) }
+                is ApiResult.Error -> setState {
+                    copy(topCharacters = topCharacters.copy(isLoading = false, error = result.error.toUserMessage()))
                 }
             }
         }

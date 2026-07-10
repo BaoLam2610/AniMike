@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.CommunityRecommendation
 import com.lambao.animike.domain.model.NewEpisodeRelease
+import com.lambao.animike.domain.model.TopCharacter
 
 @Immutable
 data class SectionState(
@@ -32,6 +33,15 @@ data class CommunityRecommendationSectionState(
     val error: String? = null,
 )
 
+// MVP5 "Nhân vật nổi bật" (/top/characters) — TopCharacter khác shape Anime
+// (không score/year/type) nên tách state riêng, cùng lý do 2 state trên.
+@Immutable
+data class TopCharacterSectionState(
+    val isLoading: Boolean = true,
+    val characters: List<TopCharacter> = emptyList(),
+    val error: String? = null,
+)
+
 @Immutable
 data class HomeState(
     val seasonNow: SectionState = SectionState(),
@@ -52,6 +62,8 @@ data class HomeState(
     val newEpisodes: NewEpisodeSectionState = NewEpisodeSectionState(),
     // MVP4 "Đề xuất cộng đồng" (/recommendations/anime).
     val communityRecommendations: CommunityRecommendationSectionState = CommunityRecommendationSectionState(),
+    // MVP5 "Nhân vật nổi bật" (/top/characters).
+    val topCharacters: TopCharacterSectionState = TopCharacterSectionState(),
 )
 
 sealed interface HomeEvent {
@@ -68,6 +80,11 @@ sealed interface HomeEvent {
     data object OnSeeAllNewEpisodesClick : HomeEvent
     data object OnRetryCommunityRecommendations : HomeEvent
     data object OnSeeAllCommunityRecommendationsClick : HomeEvent
+    // MVP5 "Nhân vật nổi bật" — bấm 1 nhân vật mở Character Detail; "Xem tất
+    // cả" mở màn Top nhân vật (Paging).
+    data class OnCharacterClick(val characterId: Int) : HomeEvent
+    data object OnRetryTopCharacters : HomeEvent
+    data object OnSeeAllTopCharactersClick : HomeEvent
 }
 
 sealed interface HomeEffect {
@@ -76,4 +93,6 @@ sealed interface HomeEffect {
     data object NavigateToUpcoming : HomeEffect
     data object NavigateToNewEpisodes : HomeEffect
     data object NavigateToCommunityRecommendations : HomeEffect
+    data class NavigateToCharacterDetail(val characterId: Int) : HomeEffect
+    data object NavigateToTopCharacters : HomeEffect
 }

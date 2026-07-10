@@ -3,6 +3,7 @@ package com.lambao.animike.domain.mapper
 import com.lambao.animike.data.local.entity.CachedAnimeDetailEntity
 import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.RelationGroup
+import com.lambao.animike.domain.model.Studio
 
 // Delimiter ASCII hiếm gặp trong tên anime/thể loại thật — đủ an toàn cho dữ
 // liệu cache chỉ dùng để hiển thị (không cần TypeConverter/JSON cho vài chuỗi này).
@@ -22,7 +23,7 @@ fun CachedAnimeDetailEntity.toDomain(): AnimeDetail = AnimeDetail(
     year = year,
     status = status,
     isAiring = isAiring,
-    studios = studios,
+    studios = decodeStudios(studiosEncoded),
     genres = decodeList(genresEncoded),
     synopsis = synopsis,
     relations = decodeRelations(relationsEncoded),
@@ -40,7 +41,7 @@ fun AnimeDetail.toEntity(fetchedAt: Long): CachedAnimeDetailEntity = CachedAnime
     year = year,
     status = status,
     isAiring = isAiring,
-    studios = studios,
+    studiosEncoded = encodeStudios(studios),
     genresEncoded = encodeList(genres),
     synopsis = synopsis,
     relationsEncoded = encodeRelations(relations),
@@ -51,6 +52,22 @@ private fun encodeList(items: List<String>): String = items.joinToString(ITEM_DE
 
 private fun decodeList(encoded: String): List<String> =
     if (encoded.isEmpty()) emptyList() else encoded.split(ITEM_DELIMITER)
+
+// Studio(malId,name): mỗi studio "malId:::name" nối bằng ITEM_DELIMITER —
+// cùng kỹ thuật FIELD_DELIMITER của relations. Bỏ qua entry hỏng format
+// (thiếu id/không parse được) khi decode để không crash màn Detail.
+private fun encodeStudios(studios: List<Studio>): String =
+    studios.joinToString(ITEM_DELIMITER) { "${it.malId}$FIELD_DELIMITER${it.name}" }
+
+private fun decodeStudios(encoded: String): List<Studio> {
+    if (encoded.isEmpty()) return emptyList()
+    return encoded.split(ITEM_DELIMITER).mapNotNull { studioStr ->
+        val parts = studioStr.split(FIELD_DELIMITER, limit = 2)
+        if (parts.size < 2) return@mapNotNull null
+        val id = parts[0].toIntOrNull() ?: return@mapNotNull null
+        Studio(malId = id, name = parts[1])
+    }
+}
 
 private fun encodeRelations(relations: List<RelationGroup>): String =
     relations.joinToString(GROUP_DELIMITER) { group ->

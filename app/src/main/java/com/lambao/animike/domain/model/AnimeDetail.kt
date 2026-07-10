@@ -15,7 +15,9 @@ data class AnimeDetail(
     val year: Int?,
     val status: String,
     val isAiring: Boolean,
-    val studios: String,
+    // MVP5 — list (không phải String join sẵn) để bấm từng studio mở Studio
+    // Detail; rỗng khi Jikan không trả studio (thay cho "N/A" cũ, UI tự ẩn).
+    val studios: List<Studio>,
     val genres: List<String>,
     val synopsis: String,
     val relations: List<RelationGroup>,
@@ -32,4 +34,13 @@ data class AnimeDetail(
 data class RelationGroup(
     val relation: String,
     val titles: List<String>,
+)
+
+// MVP5 Studio Detail — chỉ cần malId (mở /producers/{id}/full) + name (hiển
+// thị chip ở Detail). Jikan gọi chung "producers" nhưng field ở anime là
+// `studios`, giữ tên Studio cho khớp ngữ cảnh anime.
+@Immutable
+data class Studio(
+    val malId: Int,
+    val name: String,
 )

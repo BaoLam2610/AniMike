@@ -105,6 +105,8 @@ class DetailViewModel @Inject constructor(
 
             is DetailEvent.OnStaffMemberClick -> sendEffect(DetailEffect.NavigateToPersonDetail(event.personMalId))
 
+            is DetailEvent.OnStudioClick -> sendEffect(DetailEffect.NavigateToStudioDetail(event.studioMalId))
+
             DetailEvent.OnSeeAllReviewsClick -> sendEffect(DetailEffect.NavigateToReviews(malId))
 
             is DetailEvent.OnReviewClick -> {

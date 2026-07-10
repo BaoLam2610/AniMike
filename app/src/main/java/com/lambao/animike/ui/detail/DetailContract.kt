@@ -71,6 +71,8 @@ sealed interface DetailEvent {
     data class OnCharacterClick(val characterId: Int) : DetailEvent
     // Bấm 1 người trong "Ê-kíp sản xuất" — mở People Detail (MVP5 mục 2).
     data class OnStaffMemberClick(val personMalId: Int) : DetailEvent
+    // Bấm 1 chip studio (dưới GenreChips) — mở Studio Detail (MVP5 mục 3).
+    data class OnStudioClick(val studioMalId: Int) : DetailEvent
     // Bấm 1 ReviewCard trong tab "Đánh giá" — mở ReviewDetailScreen xem đầy
     // đủ (cùng hành vi click ở ReviewsScreen, xem ReviewDetailScreen.kt).
     data class OnReviewClick(val review: AnimeReview) : DetailEvent
@@ -93,6 +95,7 @@ sealed interface DetailEffect {
     data class NavigateToCharacters(val malId: Int) : DetailEffect
     data class NavigateToCharacterDetail(val characterId: Int) : DetailEffect
     data class NavigateToPersonDetail(val personMalId: Int) : DetailEffect
+    data class NavigateToStudioDetail(val studioMalId: Int) : DetailEffect
     data class NavigateToReviews(val malId: Int) : DetailEffect
     data object NavigateToReviewDetail : DetailEffect
     // Tải ảnh xuống máy qua DownloadManager (nút tải trong viewer full-screen).

@@ -16,7 +16,9 @@ data class CachedAnimeDetailEntity(
     val year: Int?,
     val status: String,
     val isAiring: Boolean,
-    val studios: String,
+    // MVP5 — studios giờ là list Studio(malId,name), encode mỗi studio
+    // "malId:::name" nối bằng ITEM_DELIMITER (xem CachedAnimeDetailMapper.kt).
+    val studiosEncoded: String,
     // Danh sách encode bằng delimiter ASCII (xem CachedAnimeDetailMapper.kt) —
     // tránh phải thêm TypeConverter + @Serializable vào domain model chỉ để
     // lưu vài chuỗi hiển thị.

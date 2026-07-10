@@ -1,7 +1,10 @@
 package com.lambao.animike.ui.persondetail
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,13 +16,15 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -33,14 +38,17 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -49,7 +57,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -59,7 +66,10 @@ import com.lambao.animike.domain.model.PersonVoiceRole
 import com.lambao.animike.ui.components.AnimeCard
 import com.lambao.animike.ui.components.BackButton
 import com.lambao.animike.ui.components.ExpandableText
+import com.lambao.animike.ui.components.ScrollToTopButton
 import com.lambao.animike.ui.theme.Dimens
+import com.lambao.animike.ui.theme.Motion
+import kotlinx.coroutines.launch
 
 @Composable
 fun PersonDetailScreen(
@@ -93,6 +103,9 @@ private fun PersonDetailScreenContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                // imePadding: co lại theo bàn phím để bringIntoView (ô tìm
+                // kiếm "Vai diễn lồng tiếng") tính đúng khoảng che khuất.
+                .imePadding()
                 .background(MaterialTheme.colorScheme.background),
         ) {
             when {
@@ -100,7 +113,7 @@ private fun PersonDetailScreenContent(
                     person = state.person,
                     staffCredits = state.staffCredits,
                     voiceRoles = state.voiceRoles,
-                    filteredVoiceRoles = state.filteredVoiceRoles,
+                    groupedVoiceRoles = state.groupedVoiceRoles,
                     voiceSearchQuery = state.voiceSearchQuery,
                     onEvent = onEvent,
                 )
@@ -122,12 +135,25 @@ private fun PersonDetailScreenContent(
 
 private enum class PersonTab { STAFF_CREDITS, VOICE_ROLES }
 
+// Ngưỡng hiện nút "cuộn lên đầu" — cùng giá trị SCROLL_TO_TOP_THRESHOLD của
+// DetailScreen, áp dụng cho CẢ 2 tab vì dùng chung 1 listState/LazyColumn
+// (yêu cầu user: "áp dụng cho tất cả các tab").
+private const val SCROLL_TO_TOP_THRESHOLD = 6
+
+// Chỉ hiện ô tìm kiếm khi danh sách đủ dài để cần tìm — dưới ngưỡng này thao
+// tác cuộn tay đã đủ nhanh, ô tìm kiếm chỉ chiếm chỗ vô ích.
+private const val VOICE_SEARCH_MIN_ITEMS = 15
+
+// Số cột lưới "Vai trò sản xuất" — 3 cột khớp quy ước AnimeCard grid đã có
+// (StudioDetailScreen's anime đã sản xuất), khác LazyRow ngang trước đây.
+private const val STAFF_GRID_COLUMNS = 3
+
 @Composable
 private fun PersonDetailContent(
     person: PersonDetail,
     staffCredits: List<PersonStaffCredit>,
     voiceRoles: List<PersonVoiceRole>,
-    filteredVoiceRoles: List<PersonVoiceRole>,
+    groupedVoiceRoles: List<VoiceRoleGroup>,
     voiceSearchQuery: String,
     onEvent: (PersonDetailEvent) -> Unit,
 ) {
@@ -151,99 +177,131 @@ private fun PersonDetailContent(
     // rồi animate ngược lên 0" thoáng qua khi LazyColumn tự clamp vị trí cuộn
     // trong 1 frame trước khi hiệu ứng kịp chạy (góp ý từ review).
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val rows = remember(staffCredits) { staffCredits.chunked(STAFF_GRID_COLUMNS) }
     LaunchedEffect(effectiveTab) { listState.scrollToItem(0) }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
-        item { PersonHero(person = person) }
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
+            item { PersonHero(person = person) }
 
-        // Stat strip vivid: 2 số liệu nhanh cho thấy ngay độ "chăm chỉ" của
-        // người này — không có ở Character Detail (sáng tạo riêng cho People).
-        item {
-            StatStrip(voiceRoleCount = voiceRoles.size, staffCreditCount = staffCredits.size)
-        }
-
-        if (person.alternateNames.isNotEmpty()) {
-            item { AlternateNameChips(names = person.alternateNames) }
-        }
-
-        if (!person.about.isNullOrBlank()) {
+            // Stat strip vivid: 2 số liệu nhanh cho thấy ngay độ "chăm chỉ" của
+            // người này — không có ở Character Detail (sáng tạo riêng cho People).
             item {
-                Column(modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm)) {
-                    Text(
-                        text = "Tiểu sử",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
-                    ExpandableText(
-                        text = person.about,
-                        modifier = Modifier.padding(top = Dimens.SpaceXs),
-                        maxCollapsedLines = 4,
-                    )
-                }
-            }
-        }
-
-        if (availableTabs.size >= 2) {
-            item {
-                PersonTabRow(
-                    tabs = availableTabs,
-                    selectedTab = effectiveTab,
-                    onTabSelected = { selectedTab = it },
-                )
-            }
-        } else if (availableTabs.size == 1) {
-            item {
-                SectionTitle(personTabLabel(availableTabs.first()))
-            }
-        }
-
-        // KHÔNG dùng AnimatedContent crossfade (khác ExploreTabsSection ở
-        // DetailScreen) — tab "Vai diễn lồng tiếng" có thể tới vài trăm item,
-        // phải dùng items() TRỰC TIẾP trong LazyColumn ngoài cùng để tận dụng
-        // lazy loading/recycle thật sự; AnimatedContent chỉ bọc được 1
-        // composable "trọn gói" nên sẽ ép toàn bộ list compose 1 lần, mất hẳn
-        // lợi ích lazy — đánh đổi lấy hiệu năng thay vì hiệu ứng chuyển tab.
-        when (effectiveTab) {
-            PersonTab.STAFF_CREDITS -> item {
-                StaffCreditsRow(
-                    credits = staffCredits,
-                    onAnimeClick = { onEvent(PersonDetailEvent.OnAnimeClick(it)) },
-                )
+                StatStrip(voiceRoleCount = voiceRoles.size, staffCreditCount = staffCredits.size)
             }
 
-            PersonTab.VOICE_ROLES -> {
+            if (person.alternateNames.isNotEmpty()) {
+                item { AlternateNameChips(names = person.alternateNames) }
+            }
+
+            if (!person.about.isNullOrBlank()) {
                 item {
-                    VoiceSearchField(
-                        query = voiceSearchQuery,
-                        onQueryChange = { onEvent(PersonDetailEvent.OnVoiceSearchQueryChange(it)) },
-                        modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
-                    )
-                }
-                if (filteredVoiceRoles.isEmpty()) {
-                    item {
+                    Column(modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm)) {
                         Text(
-                            text = "Không tìm thấy vai diễn",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceMd),
+                            text = "Tiểu sử",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground,
                         )
-                    }
-                } else {
-                    items(
-                        filteredVoiceRoles,
-                        key = { "${it.anime.malId}_${it.characterMalId}" },
-                    ) { voiceRole ->
-                        VoiceRoleItem(
-                            voiceRole = voiceRole,
-                            onClick = { onEvent(PersonDetailEvent.OnAnimeClick(voiceRole.anime.malId)) },
+                        ExpandableText(
+                            text = person.about,
+                            modifier = Modifier.padding(top = Dimens.SpaceXs),
+                            maxCollapsedLines = 4,
                         )
                     }
                 }
             }
 
-            null -> Unit
+            if (availableTabs.size >= 2) {
+                item {
+                    PersonTabRow(
+                        tabs = availableTabs,
+                        selectedTab = effectiveTab,
+                        onTabSelected = { selectedTab = it },
+                    )
+                }
+            } else if (availableTabs.size == 1) {
+                item {
+                    SectionTitle(personTabLabel(availableTabs.first()))
+                }
+            }
+
+            // KHÔNG dùng AnimatedContent crossfade (khác ExploreTabsSection ở
+            // DetailScreen) — tab "Vai diễn lồng tiếng" có thể tới vài trăm item,
+            // phải dùng items() TRỰC TIẾP trong LazyColumn ngoài cùng để tận dụng
+            // lazy loading/recycle thật sự; AnimatedContent chỉ bọc được 1
+            // composable "trọn gói" nên sẽ ép toàn bộ list compose 1 lần, mất hẳn
+            // lợi ích lazy — đánh đổi lấy hiệu năng thay vì hiệu ứng chuyển tab.
+            when (effectiveTab) {
+                PersonTab.STAFF_CREDITS -> {
+                    // Lưới dọc 3 cột (thay LazyRow ngang trước đây) — chunked
+                    // thành từng hàng, mỗi hàng là 1 item của CHÍNH LazyColumn
+                    // ngoài cùng (không lồng LazyVerticalGrid vào LazyColumn —
+                    // vi phạm nested scrollable), vẫn lazy theo từng hàng.
+
+                    items(rows, key = { row -> row.first().anime.malId }) { row ->
+                        StaffCreditGridRow(
+                            row = row,
+                            onAnimeClick = { onEvent(PersonDetailEvent.OnAnimeClick(it)) },
+                        )
+                    }
+                }
+
+                PersonTab.VOICE_ROLES -> {
+                    // Ô tìm kiếm chỉ hiện khi danh sách GỐC (chưa lọc) đủ dài
+                    // — dùng voiceRoles.size (không phải filtered) để ô không
+                    // biến mất giữa chừng khi user đang gõ làm filtered co lại.
+                    if (voiceRoles.size >= VOICE_SEARCH_MIN_ITEMS) {
+                        item {
+                            VoiceSearchField(
+                                query = voiceSearchQuery,
+                                onQueryChange = { onEvent(PersonDetailEvent.OnVoiceSearchQueryChange(it)) },
+                                modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+                            )
+                        }
+                    }
+                    if (groupedVoiceRoles.isEmpty()) {
+                        item {
+                            Text(
+                                text = "Không tìm thấy vai diễn",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceMd),
+                            )
+                        }
+                    } else {
+                        // Nhóm theo anime (1 người có thể lồng nhiều nhân vật
+                        // trong cùng phim) — mỗi nhóm 1 item (header anime +
+                        // các dòng nhân vật, đã sort Chính trước Phụ ở State).
+                        items(groupedVoiceRoles, key = { it.anime.malId }) { group ->
+                            VoiceRoleGroupItem(
+                                group = group,
+                                onClick = { onEvent(PersonDetailEvent.OnAnimeClick(group.anime.malId)) },
+                            )
+                        }
+                    }
+                }
+
+                null -> Unit
+            }
+            item { Spacer(Modifier.height(Dimens.SpaceXl)) }
         }
-        item { Spacer(Modifier.height(Dimens.SpaceXl)) }
+
+        // Nút nổi "cuộn lên đầu" — áp dụng cho CẢ 2 tab (yêu cầu user), vì
+        // dùng chung 1 listState bất kể tab nào đang hiện.
+        val showScrollToTop by remember {
+            derivedStateOf { listState.firstVisibleItemIndex > SCROLL_TO_TOP_THRESHOLD }
+        }
+        AnimatedVisibility(
+            visible = showScrollToTop,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(Dimens.ScreenPadding),
+            enter = fadeIn(animationSpec = tween(Motion.DurationShort4, easing = Motion.EasingEmphasizedDecelerate)),
+            exit = fadeOut(animationSpec = tween(Motion.DurationShort4, easing = Motion.EasingEmphasizedAccelerate)),
+        ) {
+            ScrollToTopButton(onClick = { coroutineScope.launch { listState.animateScrollToItem(0) } })
+        }
     }
 }
 
@@ -418,14 +476,19 @@ private fun PersonTabRow(tabs: List<PersonTab>, selectedTab: PersonTab?, onTabSe
     }
 }
 
+// 1 hàng của lưới dọc 3 cột — chunked() có thể trả hàng cuối THIẾU đủ
+// STAFF_GRID_COLUMNS phần tử, thêm Spacer(weight) bù chỗ trống để card không
+// bị giãn full-width sai tỉ lệ.
 @Composable
-private fun StaffCreditsRow(credits: List<PersonStaffCredit>, onAnimeClick: (Int) -> Unit) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
+private fun StaffCreditGridRow(row: List<PersonStaffCredit>, onAnimeClick: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
         horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
     ) {
-        items(credits, key = { it.anime.malId }) { credit ->
-            Column(modifier = Modifier.width(Dimens.CardWidth)) {
+        row.forEach { credit ->
+            Column(modifier = Modifier.weight(1f)) {
                 AnimeCard(
                     anime = credit.anime,
                     onClick = { onAnimeClick(credit.anime.malId) },
@@ -443,11 +506,19 @@ private fun StaffCreditsRow(credits: List<PersonStaffCredit>, onAnimeClick: (Int
                 }
             }
         }
+        repeat(STAFF_GRID_COLUMNS - row.size) {
+            Spacer(modifier = Modifier.weight(1f))
+        }
     }
 }
 
 @Composable
 private fun VoiceSearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    // BringIntoViewRequester: khi ô này nhận focus, tự cuộn LazyColumn cha để
+    // đẩy ô lên trên, tránh bàn phím che mất danh sách bên dưới (yêu cầu
+    // user) — kết hợp .imePadding() ở Box ngoài cùng để tính đúng khoảng che.
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val coroutineScope = rememberCoroutineScope()
     TextField(
         value = query,
         onValueChange = onQueryChange,
@@ -476,80 +547,98 @@ private fun VoiceSearchField(query: String, onQueryChange: (String) -> Unit, mod
             unfocusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent,
         ),
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .onFocusEvent { focusState ->
+                if (focusState.isFocused) {
+                    coroutineScope.launch { bringIntoViewRequester.bringIntoView() }
+                }
+            },
     )
 }
 
-// Sáng tạo riêng cho People Detail: thumbnail "duo" ghép poster anime + avatar
-// nhân vật đè góc dưới-phải (viền màu nền để tạo cảm giác "cắt dán" tách khỏi
-// ảnh phía sau) — thay vì avatar đơn điệu như CharacterItem/VoiceActorItem.
+// Nhóm các vai diễn TRÙNG anime (yêu cầu user) — header hiện poster + tên
+// anime 1 LẦN, các dòng nhân vật bên dưới đã sort Chính->Phụ ở State
+// (PersonDetailState.groupedVoiceRoles), KHÔNG lặp lại ảnh/tên anime cho mỗi
+// nhân vật như VoiceRoleItem (duo thumbnail) trước đây.
 @Composable
-private fun VoiceRoleItem(voiceRole: PersonVoiceRole, onClick: () -> Unit) {
-    Row(
+private fun VoiceRoleGroupItem(group: VoiceRoleGroup, onClick: () -> Unit) {
+    val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
+    val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
     ) {
-        DuoThumbnail(animeImageUrl = voiceRole.anime.imageUrl, characterImageUrl = voiceRole.characterImageUrl)
-        Column(modifier = Modifier.weight(1f)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
+        ) {
+            AsyncImage(
+                model = group.anime.imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                placeholder = placeholderPainter,
+                error = placeholderPainter,
+                fallback = placeholderPainter,
+                modifier = Modifier
+                    .size(width = Dimens.VoiceRoleThumbnailWidth, height = Dimens.VoiceRoleThumbnailHeight)
+                    .clip(RoundedCornerShape(Dimens.RadiusChip)),
+            )
             Text(
-                text = voiceRole.characterName,
+                text = group.anime.title,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = voiceRole.anime.title,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
         }
-        if (voiceRole.role.isNotEmpty()) VoiceRoleBadge(role = voiceRole.role)
+        group.roles.forEach { role ->
+            VoiceRoleCharacterRow(role = role)
+        }
     }
 }
 
+// Thụt lề theo đúng chiều rộng poster + spacing ở header phía trên, để avatar
+// nhân vật thẳng hàng dưới poster anime thay vì dính sát lề trái.
 @Composable
-private fun DuoThumbnail(animeImageUrl: String?, characterImageUrl: String?) {
+private fun VoiceRoleCharacterRow(role: PersonVoiceRole) {
     val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
     val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
-    val ringColor = MaterialTheme.colorScheme.background
 
-    Box(
+    Row(
         modifier = Modifier
-            .width(Dimens.VoiceRoleThumbnailWidth + Dimens.VoiceRoleCharacterBadgeSize / 2)
-            .height(Dimens.VoiceRoleThumbnailHeight + Dimens.VoiceRoleCharacterBadgeSize / 2),
+            .fillMaxWidth()
+            .padding(start = Dimens.VoiceRoleThumbnailWidth + Dimens.SpaceSm, top = Dimens.SpaceXs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
     ) {
         AsyncImage(
-            model = animeImageUrl,
+            model = role.characterImageUrl,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             placeholder = placeholderPainter,
             error = placeholderPainter,
             fallback = placeholderPainter,
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .size(width = Dimens.VoiceRoleThumbnailWidth, height = Dimens.VoiceRoleThumbnailHeight)
-                .clip(RoundedCornerShape(Dimens.RadiusChip)),
-        )
-        AsyncImage(
-            model = characterImageUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            placeholder = placeholderPainter,
-            error = placeholderPainter,
-            fallback = placeholderPainter,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
                 .size(Dimens.VoiceRoleCharacterBadgeSize)
-                .border(width = 2.dp, color = ringColor, shape = CircleShape)
                 .clip(CircleShape),
         )
+        Text(
+            text = role.characterName,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (role.role.isNotEmpty()) VoiceRoleBadge(role = role.role)
     }
 }
 

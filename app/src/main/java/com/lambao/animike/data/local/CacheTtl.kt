@@ -45,6 +45,16 @@ object CacheTtl {
     // như tĩnh, TTL dài như CHARACTER_DETAIL_MS.
     const val PERSON_DETAIL_MS = 7 * 24 * 60 * 60 * 1000L
     const val STAFF_MS = 7 * 24 * 60 * 60 * 1000L
+
+    // MVP5 Studio Detail (/producers/{id}/full) — thông tin studio gần như
+    // tĩnh (năm thành lập/bio/link đổi rất hiếm; `count` nhích chậm), TTL dài.
+    // Danh sách anime của studio KHÔNG cache (Paging 3 trực tiếp).
+    const val STUDIO_DETAIL_MS = 7 * 24 * 60 * 60 * 1000L
+
+    // MVP5 "Top nhân vật" — preview Home (/top/characters page 1). Bảng xếp
+    // hạng favorites nhích chậm nhưng để đồng bộ nhịp với 3 list Home khác
+    // (24h) nên dùng LIST_MS thay vì TTL dài; "Xem tất cả" dùng Paging riêng.
+    const val TOP_CHARACTERS_MS = 24 * 60 * 60 * 1000L
 }
 
 fun isExpired(fetchedAt: Long, ttlMs: Long, now: Long = System.currentTimeMillis()): Boolean {

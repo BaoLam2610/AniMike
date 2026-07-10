@@ -16,6 +16,8 @@ import com.lambao.animike.data.repository.SearchRepository
 import com.lambao.animike.data.repository.SearchRepositoryImpl
 import com.lambao.animike.data.repository.SeasonArchiveRepository
 import com.lambao.animike.data.repository.SeasonArchiveRepositoryImpl
+import com.lambao.animike.data.repository.StudioDetailRepository
+import com.lambao.animike.data.repository.StudioDetailRepositoryImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -57,4 +59,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindPersonDetailRepository(impl: PersonDetailRepositoryImpl): PersonDetailRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindStudioDetailRepository(impl: StudioDetailRepositoryImpl): StudioDetailRepository
 }
