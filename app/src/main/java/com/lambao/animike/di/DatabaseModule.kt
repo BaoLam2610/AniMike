@@ -26,6 +26,7 @@ import com.lambao.animike.data.local.dao.SeasonYearDao
 import com.lambao.animike.data.local.dao.StreamingLinkDao
 import com.lambao.animike.data.local.dao.StudioDetailDao
 import com.lambao.animike.data.local.dao.TopCharacterDao
+import com.lambao.animike.data.local.dao.TrackingDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -43,9 +44,11 @@ object DatabaseModule {
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, DATABASE_NAME)
-            // Chưa có user thật, dữ liệu toàn là cache/vài favorite test — mất
-            // khi đổi schema là chấp nhận được. Cần thêm Migration thật khi
-            // release (xem docs/ROADMAP.md).
+            // ⚠️ Từ v17 (MVP6), DB chứa DỮ LIỆU USER THẬT (bảng favorite +
+            // tracking: trạng thái xem, sắp tới cả tiến độ tập/điểm cá nhân)
+            // chứ không còn thuần cache — mọi bump schema TỪ ĐÂY TRỞ ĐI phải
+            // viết Migration thật (hoặc AutoMigration), destructive fallback
+            // sẽ xoá sạch tracking user đã tích lũy (xem docs/ROADMAP.md).
             .fallbackToDestructiveMigration(true)
             .build()
 
@@ -120,4 +123,7 @@ object DatabaseModule {
 
     @Provides
     fun provideTopCharacterDao(database: AppDatabase): TopCharacterDao = database.topCharacterDao()
+
+    @Provides
+    fun provideTrackingDao(database: AppDatabase): TrackingDao = database.trackingDao()
 }

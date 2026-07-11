@@ -565,12 +565,21 @@ nhất" chứ không theo thứ tự liệt kê gốc trong roadmap:
       `ui/components/` (2 nơi dùng). Áp dụng tự nhiên cho cả 2 tab vì dùng
       chung 1 `listState`/`LazyColumn`, không cần code riêng cho từng tab.
     - **"Vai diễn lồng tiếng" nhóm theo anime + sort Chính→Phụ** — thay hẳn
-      "duo thumbnail" (poster+avatar đè) bằng bố cục nhóm: header hiện poster+
-      tên anime 1 LẦN, các dòng nhân vật bên dưới (đã sort Main trước
-      Supporting) không lặp lại ảnh/tên anime nữa. Model mới `VoiceRoleGroup`
-      + computed `PersonDetailState.groupedVoiceRoles` (group theo
-      `anime.malId` bằng `LinkedHashMap` giữ thứ tự xuất hiện đầu, `sortedBy`
-      ổn định trong nhóm).
+      "duo thumbnail" (poster+avatar đè) bằng bố cục nhóm. Model mới
+      `VoiceRoleGroup` + computed `PersonDetailState.groupedVoiceRoles` (group
+      theo `anime.malId` bằng `LinkedHashMap` giữ thứ tự xuất hiện đầu,
+      `sortedBy` ổn định trong nhóm). Bản đầu là header phẳng + dòng thụt lề —
+      user chê kém sinh động, làm lại thành **CARD nổi trên nền `surface`**:
+      poster 2:3 lớn (64x96, token `VoiceRoleGroupPosterWidth/Height`) bên
+      trái làm điểm nhấn, tên anime + dòng nhân vật bên phải, avatar vai
+      CHÍNH có **ring màu `primary`** (token `BorderThin` mới, thay hardcode
+      2.dp) phân biệt tức thì với vai phụ; cả card là 1 vùng bấm
+      (onClickLabel + Role.Button — fix a11y từ review vì mất cue duo cũ).
+    - **Fix lỗi biên dịch user phát hiện**: `remember(staffCredits)` cho
+      chunked rows bị đặt TRONG content lambda của `LazyColumn`
+      (`LazyListScope` KHÔNG phải @Composable context — lỗi "@Composable
+      invocations can only happen from...") — chuyển lên thân composable
+      `PersonDetailContent`.
     - **Ô tìm kiếm ẩn khi danh sách ngắn** — chỉ hiện khi `voiceRoles.size >= 15`
       (dùng size GỐC, không phải đã lọc, để ô không biến mất giữa chừng lúc
       gõ). Khi focus, `BringIntoViewRequester` tự cuộn `LazyColumn` cha đẩy ô
@@ -638,8 +647,58 @@ nhất" chứ không theo thứ tự liệt kê gốc trong roadmap:
 Detail, People/Seiyuu Detail, Studio Detail, Top nhân vật. Tiếp theo: MVP 6.
 
 ### MVP 6 — Tracking local
-- [ ] Trạng thái xem: Đang xem / Đã xem / Tạm dừng / Bỏ / Dự định xem (Room)
-- [ ] Đánh dấu tập đã xem, chấm điểm cá nhân
+- [x] **Đợt 1 — Trạng thái xem** ✅ (Đang xem / Đã xem / Tạm dừng / Bỏ / Dự
+  định xem, thuần Room không API):
+  - Data: bảng `tracking` (PK malId, snapshot title/ảnh/score/year như
+    `favorite` để "Danh sách" hiển thị không cần API; cột
+    `episodesWatched`/`personalScore` KHAI SẴN cho đợt 2 — tránh bump schema
+    2 lần, cả 3 cột tracking đều nullable, row bị xoá khi cả 3 null).
+    `TrackingDao.toggleStatus` gộp đọc+ghi @Transaction (chống TOCTOU
+    double-tap, cùng kỹ thuật `FavoriteDao.toggle`): chọn status mới = set,
+    bấm LẠI status đang chọn = bỏ theo dõi. `TrackingRepository` local-only
+    (nuốt lỗi + log như FavoriteRepository). DB version 16→17.
+  - **Detail — `WatchStatusButton` trên TopBar** (làm lại theo góp ý user
+    sau khi build thử — bản đầu là card `TrackingStatusBar` full-width dưới
+    hero, user chê Detail đã quá nhiều section): nút tròn thứ 2 cạnh nút ♥
+    (cùng style nền surface bán trong suốt), 🔖 trung tính khi chưa theo dõi,
+    đổi thành emoji + màu ngữ nghĩa của trạng thái khi đã set; bấm mở
+    **DropdownMenu** (pattern M3 chuẩn cho action trên toolbar, tiền lệ
+    DropdownMenu đầu tiên của app) — gom cả 2 hành động cá nhân (trạng thái +
+    yêu thích) về góc trên-phải, trả lại không gian nội dung. **Mỗi trạng
+    thái 1 màu ngữ nghĩa riêng** (mapping dùng chung
+    `ui/components/WatchStatusUi.kt`): Đang xem = success, Đã xem = tertiary,
+    Tạm dừng = warning (alias của rankGold), Bỏ = error, Dự định xem = primary.
+  - **Lọc trạng thái theo tình trạng phát sóng** (user góp ý: phim chưa chiếu
+    không thể "Đang xem/Đã xem") — computed `DetailState.availableWatchStatuses`:
+    sắp chiếu ("Not yet aired") → chỉ Dự định xem; đang chiếu → ẩn Đã xem
+    (giống MAL); chiếu xong → đủ 5. Trạng thái ĐANG set luôn giữ trong menu
+    (kể cả khi không còn hợp lệ do dữ liệu Jikan đổi) để user bỏ được. Đợt 2
+    (tiến độ tập) cũng sẽ theo luật này — phim chưa chiếu không có stepper.
+  - **"Danh sách" nâng thành THƯ VIỆN**: hợp nhất (union) favorites +
+    tracking qua `combine` 2 Flow trong `FavoritesViewModel` — anime chỉ có
+    trạng thái (không yêu thích) giờ cũng xuất hiện. Hàng **filter chip**:
+    Tất cả / ♥ Yêu thích / 5 trạng thái (chip trạng thái CHỈ hiện khi
+    count > 0, kèm count, màu ngữ nghĩa). Card poster có **badge trạng thái**
+    (emoji + nhãn màu, góc dưới-trái — góc trên-trái đã có score badge) + ♥
+    nhỏ góc dưới-phải khi vừa yêu thích vừa có trạng thái. Model
+    `LibraryEntry`/`LibraryFilter` (sealed — filter status mang theo enum).
+  - **Sửa qua review** (không blocker): (1) hợp thức hoá filter trong
+    ViewModel khi entries đổi — chip đang chọn biến mất (bỏ trạng thái của
+    anime cuối cùng trong mục đang lọc) thì tự về "Tất cả" thay vì kẹt;
+    (2) key chip tường minh (`LibraryFilter.key`) thay `toString()` (R8
+    obfuscate tên class làm key lệch giữa các bản build); (3) gọi
+    `filteredEntries` 1 lần/recomposition; (4) alias `ColorScheme.warning`
+    (trỏ RankGold) cho ON_HOLD thay vì dùng thẳng `rankGold` (semantic
+    drift); (5) a11y: stateDescription mở/đóng cho TrackingStatusBar + ẩn
+    emoji glyph khỏi TalkBack trong chip.
+  - **⚠️ QUAN TRỌNG từ v17**: DB chứa DỮ LIỆU USER THẬT (favorite +
+    tracking) — mọi bump schema từ đây phải viết Migration thật
+    (AutoMigration được), KHÔNG dựa destructive fallback nữa (sẽ xoá sạch
+    tracking user tích lũy). Comment cảnh báo đã đặt tại DatabaseModule.
+- [ ] **Đợt 2 — Tập đã xem + điểm cá nhân** (cột Room đã khai sẵn ở đợt 1):
+  tiến độ "đã xem tới tập N" (stepper + progress bar ở EpisodesSection,
+  KHÔNG đánh dấu từng tập rời — Jikan không có id tập ổn định); điểm cá nhân
+  1-10 (dialog slider + emoji phản hồi theo mức, hiện cạnh điểm MAL ở hero).
 
 ### Xa hơn (xem FEATURES.md mục 2-3)
 - Reviews → Manga → Xem profile MAL công khai → Notification lịch chiếu → Widget/Deep link

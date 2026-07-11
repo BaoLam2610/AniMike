@@ -15,7 +15,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -48,6 +47,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -77,6 +78,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.window.Dialog
@@ -97,11 +99,15 @@ import com.lambao.animike.domain.model.Picture
 import com.lambao.animike.domain.model.RelationGroup
 import com.lambao.animike.domain.model.StreamingLink
 import com.lambao.animike.domain.model.Studio
+import com.lambao.animike.domain.model.WatchStatus
 import com.lambao.animike.ui.components.AnimeCard
 import com.lambao.animike.ui.components.BackButton
 import com.lambao.animike.ui.components.ExpandableText
 import com.lambao.animike.ui.components.ReviewCard
 import com.lambao.animike.ui.components.ScrollToTopButton
+import com.lambao.animike.ui.components.emoji
+import com.lambao.animike.ui.components.label
+import com.lambao.animike.ui.components.statusColor
 import com.lambao.animike.ui.theme.Dimens
 import com.lambao.animike.ui.theme.Motion
 import com.lambao.animike.ui.theme.success
@@ -297,8 +303,11 @@ private fun DetailScreenContent(
             TopBar(
                 isFavorite = state.isFavorite,
                 showFavorite = state.detail != null,
+                watchStatus = state.watchStatus,
+                availableWatchStatuses = state.availableWatchStatuses,
                 onBackClick = onBackClick,
                 onFavoriteClick = { onEvent(DetailEvent.OnFavoriteClick) },
+                onWatchStatusSelected = { onEvent(DetailEvent.OnWatchStatusSelected(it)) },
             )
 
             val showScrollToTop by remember {
@@ -323,7 +332,15 @@ private fun DetailScreenContent(
 }
 
 @Composable
-private fun TopBar(isFavorite: Boolean, showFavorite: Boolean, onBackClick: () -> Unit, onFavoriteClick: () -> Unit) {
+private fun TopBar(
+    isFavorite: Boolean,
+    showFavorite: Boolean,
+    watchStatus: WatchStatus?,
+    availableWatchStatuses: List<WatchStatus>,
+    onBackClick: () -> Unit,
+    onFavoriteClick: () -> Unit,
+    onWatchStatusSelected: (WatchStatus) -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -331,13 +348,110 @@ private fun TopBar(isFavorite: Boolean, showFavorite: Boolean, onBackClick: () -
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         BackButton(onClick = onBackClick)
-        // Luôn render đủ 2 slot (Spacer cùng kích thước khi chưa có favorite)
+        // Luôn render đủ 2 slot (Spacer cùng kích thước khi chưa có detail)
         // để Back không bị lệch vị trí phụ thuộc vào Arrangement.SpaceBetween
-        // xử lý trường hợp 1-vs-2 con khác nhau.
+        // xử lý trường hợp 1-vs-2 con khác nhau. Nhóm hành động cá nhân
+        // (trạng thái xem + yêu thích) gom về góc trên-phải — user góp ý màn
+        // Detail đã quá nhiều section, card TrackingStatusBar cũ trong nội
+        // dung bị gỡ, chuyển thành nút icon + DropdownMenu ở đây.
         if (showFavorite) {
-            FavoriteButton(isFavorite = isFavorite, onClick = onFavoriteClick)
+            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm)) {
+                WatchStatusButton(
+                    currentStatus = watchStatus,
+                    availableStatuses = availableWatchStatuses,
+                    onStatusSelected = onWatchStatusSelected,
+                )
+                FavoriteButton(isFavorite = isFavorite, onClick = onFavoriteClick)
+            }
         } else {
             Spacer(Modifier.size(Dimens.IconButtonSize))
+        }
+    }
+}
+
+// MVP6 Tracking — nút trạng thái xem trên TopBar (cạnh ♥, cùng style nền
+// surface bán trong suốt): 🔖 trung tính khi chưa theo dõi, đổi thành emoji +
+// màu ngữ nghĩa của trạng thái khi đã set (WatchStatusUi.kt). Bấm mở
+// DropdownMenu (pattern M3 chuẩn cho action trên toolbar — thay card
+// expand-inline cũ theo góp ý user vì Detail quá nhiều section). Menu chỉ
+// liệt kê trạng thái HỢP LỆ theo tình trạng phát sóng (DetailState.
+// availableWatchStatuses); chọn lại trạng thái đang set = bỏ theo dõi.
+@Composable
+private fun WatchStatusButton(
+    currentStatus: WatchStatus?,
+    availableStatuses: List<WatchStatus>,
+    onStatusSelected: (WatchStatus) -> Unit,
+) {
+    // Menu là transient UI (đóng khi dismiss/chọn) — remember thường, không
+    // cần saveable qua process death.
+    var menuExpanded by remember { mutableStateOf(false) }
+    val accent = currentStatus?.statusColor() ?: MaterialTheme.colorScheme.onBackground
+
+    Box {
+        Box(
+            modifier = Modifier
+                .size(Dimens.IconButtonSize)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
+                .clickable(onClick = { menuExpanded = true })
+                .semantics {
+                    contentDescription =
+                        currentStatus?.let { "Trạng thái xem: ${it.label}" } ?: "Chọn trạng thái xem"
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = currentStatus?.emoji ?: "🔖",
+                style = MaterialTheme.typography.titleMedium,
+                color = accent,
+            )
+        }
+        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+            availableStatuses.forEach { status ->
+                val selected = status == currentStatus
+                val statusAccent = status.statusColor()
+                DropdownMenuItem(
+                    leadingIcon = {
+                        Text(
+                            text = status.emoji,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = statusAccent,
+                            // Label đã đủ nghĩa — ẩn glyph khỏi TalkBack.
+                            modifier = Modifier.clearAndSetSemantics {},
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = status.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (selected) statusAccent else MaterialTheme.colorScheme.onBackground,
+                        )
+                    },
+                    trailingIcon = if (selected) {
+                        {
+                            Text(
+                                text = "✓",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = statusAccent,
+                                modifier = Modifier.clearAndSetSemantics {},
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    // stateDescription thay cho glyph ✓ đã ẩn — TalkBack đọc
+                    // "Đang chọn" cho item hiện tại.
+                    modifier = if (selected) {
+                        Modifier.semantics { stateDescription = "Đang chọn — bấm để bỏ theo dõi" }
+                    } else {
+                        Modifier
+                    },
+                    onClick = {
+                        onStatusSelected(status)
+                        menuExpanded = false
+                    },
+                )
+            }
         }
     }
 }

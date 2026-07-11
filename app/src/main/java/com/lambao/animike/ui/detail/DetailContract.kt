@@ -11,6 +11,7 @@ import com.lambao.animike.domain.model.AnimeVideo
 import com.lambao.animike.domain.model.Episode
 import com.lambao.animike.domain.model.Picture
 import com.lambao.animike.domain.model.StreamingLink
+import com.lambao.animike.domain.model.WatchStatus
 
 @Immutable
 data class DetailState(
@@ -38,6 +39,8 @@ data class DetailState(
     // ReviewsScreen) — xem comment ở ReviewDetailScreen.kt.
     val selectedReview: AnimeReview? = null,
     val isFavorite: Boolean = false,
+    // MVP6 Tracking — trạng thái xem hiện tại của user (null = chưa theo dõi).
+    val watchStatus: WatchStatus? = null,
     // Pull-to-refresh (docs/ROADMAP.md mục 3b) — force refresh detail +
     // recommendations/reviews/pictures bất kể TTL. Episodes không cần "force"
     // vì nó vốn đã luôn gọi lại API ở mọi lần loadAll().
@@ -50,6 +53,22 @@ data class DetailState(
     // (PV 2, PV 3, music video...).
     val tabVideos: List<AnimeVideo>
         get() = videos.filter { it.youtubeId != detail?.trailerYoutubeId }
+
+    // Trạng thái ĐƯỢC PHÉP chọn theo tình trạng phát sóng (user góp ý: phim
+    // chưa chiếu không thể "Đang xem/Đã xem"): sắp chiếu → chỉ Dự định xem;
+    // đang chiếu → ẩn Đã xem (chưa kết thúc thì chưa "xem xong", giống MAL);
+    // chiếu xong → đủ 5. Trạng thái ĐANG set luôn được giữ trong danh sách
+    // (kể cả khi không còn hợp lệ do dữ liệu Jikan đổi) để user bỏ được nó.
+    val availableWatchStatuses: List<WatchStatus>
+        get() {
+            val d = detail ?: return emptyList()
+            val base = when {
+                d.status.equals("Not yet aired", ignoreCase = true) -> listOf(WatchStatus.PLAN_TO_WATCH)
+                d.isAiring -> WatchStatus.entries.filter { it != WatchStatus.COMPLETED }
+                else -> WatchStatus.entries.toList()
+            }
+            return if (watchStatus != null && watchStatus !in base) listOf(watchStatus) + base else base
+        }
 }
 
 sealed interface DetailEvent {
@@ -62,6 +81,9 @@ sealed interface DetailEvent {
     // Nút "Xem trên..." — mở URL nền tảng streaming bằng browser ngoài.
     data class OnStreamingLinkClick(val url: String) : DetailEvent
     data object OnFavoriteClick : DetailEvent
+    // Chọn 1 trạng thái trong menu của WatchStatusButton (TopBar) — chọn lại
+    // đúng trạng thái đang set = bỏ theo dõi (toggle-off, TrackingRepository).
+    data class OnWatchStatusSelected(val status: WatchStatus) : DetailEvent
     data class OnRecommendationClick(val malId: Int) : DetailEvent
     data object OnSeeAllEpisodesClick : DetailEvent
     data object OnSeeAllCharactersClick : DetailEvent

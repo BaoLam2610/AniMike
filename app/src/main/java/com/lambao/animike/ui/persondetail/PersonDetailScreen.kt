@@ -5,6 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,6 +54,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -103,8 +105,13 @@ private fun PersonDetailScreenContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                // imePadding: co lại theo bàn phím để bringIntoView (ô tìm
-                // kiếm "Vai diễn lồng tiếng") tính đúng khoảng che khuất.
+                // imePadding: co viewport theo bàn phím để bringIntoView (ô
+                // tìm kiếm "Vai diễn lồng tiếng") tính đúng khoảng che khuất.
+                // LƯU Ý (review): Scaffold ngoài ở AniMikeNavHost dùng
+                // contentWindowInsets mặc định (safeDrawing, ĐÃ gồm ime) nên
+                // dòng này CÓ THỂ là no-op — giữ làm lưới an toàn vì insets
+                // đã-tiêu-thụ ở tổ tiên thì imePadding tự về 0, không cộng
+                // dồn; cần test thật với bàn phím mở để xác nhận hành vi.
                 .imePadding()
                 .background(MaterialTheme.colorScheme.background),
         ) {
@@ -178,7 +185,13 @@ private fun PersonDetailContent(
     // trong 1 frame trước khi hiệu ứng kịp chạy (góp ý từ review).
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    val rows = remember(staffCredits) { staffCredits.chunked(STAFF_GRID_COLUMNS) }
+
+    // remember PHẢI nằm ở đây (thân composable), KHÔNG được đặt trong content
+    // lambda của LazyColumn — LazyListScope không phải @Composable context,
+    // đặt trong đó sẽ lỗi biên dịch "@Composable invocations can only happen
+    // from the context of a @Composable function" (user phát hiện qua IDE).
+    val staffCreditRows = remember(staffCredits) { staffCredits.chunked(STAFF_GRID_COLUMNS) }
+
     LaunchedEffect(effectiveTab) { listState.scrollToItem(0) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -235,11 +248,15 @@ private fun PersonDetailContent(
             when (effectiveTab) {
                 PersonTab.STAFF_CREDITS -> {
                     // Lưới dọc 3 cột (thay LazyRow ngang trước đây) — chunked
-                    // thành từng hàng, mỗi hàng là 1 item của CHÍNH LazyColumn
-                    // ngoài cùng (không lồng LazyVerticalGrid vào LazyColumn —
-                    // vi phạm nested scrollable), vẫn lazy theo từng hàng.
-
-                    items(rows, key = { row -> row.first().anime.malId }) { row ->
+                    // thành từng hàng (staffCreditRows, remember ở thân
+                    // composable phía trên), mỗi hàng là 1 item của CHÍNH
+                    // LazyColumn ngoài cùng (không lồng LazyVerticalGrid vào
+                    // LazyColumn — vi phạm nested scrollable), lazy theo hàng.
+                    items(
+                        staffCreditRows,
+                        key = { row -> row.first().anime.malId },
+                        contentType = { "staff_row" },
+                    ) { row ->
                         StaffCreditGridRow(
                             row = row,
                             onAnimeClick = { onEvent(PersonDetailEvent.OnAnimeClick(it)) },
@@ -271,9 +288,13 @@ private fun PersonDetailContent(
                         }
                     } else {
                         // Nhóm theo anime (1 người có thể lồng nhiều nhân vật
-                        // trong cùng phim) — mỗi nhóm 1 item (header anime +
+                        // trong cùng phim) — mỗi nhóm 1 item (card poster +
                         // các dòng nhân vật, đã sort Chính trước Phụ ở State).
-                        items(groupedVoiceRoles, key = { it.anime.malId }) { group ->
+                        items(
+                            groupedVoiceRoles,
+                            key = { it.anime.malId },
+                            contentType = { "voice_group" },
+                        ) { group ->
                             VoiceRoleGroupItem(
                                 group = group,
                                 onClick = { onEvent(PersonDetailEvent.OnAnimeClick(group.anime.malId)) },
@@ -558,64 +579,73 @@ private fun VoiceSearchField(query: String, onQueryChange: (String) -> Unit, mod
     )
 }
 
-// Nhóm các vai diễn TRÙNG anime (yêu cầu user) — header hiện poster + tên
-// anime 1 LẦN, các dòng nhân vật bên dưới đã sort Chính->Phụ ở State
-// (PersonDetailState.groupedVoiceRoles), KHÔNG lặp lại ảnh/tên anime cho mỗi
-// nhân vật như VoiceRoleItem (duo thumbnail) trước đây.
+// Nhóm các vai diễn TRÙNG anime (yêu cầu user), trình bày dạng CARD nổi trên
+// nền surface (bản đầu là header + dòng thụt lề "phẳng", user chê kém sinh
+// động so với duo thumbnail cũ — làm lại): poster 2:3 lớn hơn bên trái làm
+// điểm nhấn hình ảnh, tên anime + các dòng nhân vật (đã sort Chính->Phụ ở
+// State) bên phải; avatar nhân vật vai CHÍNH có ring màu primary để "toả
+// sáng" hơn vai phụ. Cả card là 1 vùng bấm (mở Detail của anime) — kèm
+// onClickLabel/Role.Button vì không còn duo thumbnail làm cue bấm được
+// (góp ý a11y từ review).
 @Composable
 private fun VoiceRoleGroupItem(group: VoiceRoleGroup, onClick: () -> Unit) {
-    val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
-    val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
-        ) {
-            AsyncImage(
-                model = group.anime.imageUrl,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                placeholder = placeholderPainter,
-                error = placeholderPainter,
-                fallback = placeholderPainter,
-                modifier = Modifier
-                    .size(width = Dimens.VoiceRoleThumbnailWidth, height = Dimens.VoiceRoleThumbnailHeight)
-                    .clip(RoundedCornerShape(Dimens.RadiusChip)),
-            )
-            Text(
-                text = group.anime.title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        group.roles.forEach { role ->
-            VoiceRoleCharacterRow(role = role)
-        }
-    }
-}
-
-// Thụt lề theo đúng chiều rộng poster + spacing ở header phía trên, để avatar
-// nhân vật thẳng hàng dưới poster anime thay vì dính sát lề trái.
-@Composable
-private fun VoiceRoleCharacterRow(role: PersonVoiceRole) {
     val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
     val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = Dimens.VoiceRoleThumbnailWidth + Dimens.SpaceSm, top = Dimens.SpaceXs),
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs)
+            .clip(RoundedCornerShape(Dimens.RadiusCard))
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(
+                onClickLabel = "Xem chi tiết ${group.anime.title}",
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .padding(Dimens.SpaceMd),
+        horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
+    ) {
+        AsyncImage(
+            model = group.anime.imageUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            placeholder = placeholderPainter,
+            error = placeholderPainter,
+            fallback = placeholderPainter,
+            modifier = Modifier
+                .size(width = Dimens.VoiceRoleGroupPosterWidth, height = Dimens.VoiceRoleGroupPosterHeight)
+                .clip(RoundedCornerShape(Dimens.RadiusChip)),
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
+        ) {
+            Text(
+                text = group.anime.title,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            group.roles.forEach { role ->
+                VoiceRoleCharacterRow(role = role)
+            }
+        }
+    }
+}
+
+@Composable
+private fun VoiceRoleCharacterRow(role: PersonVoiceRole) {
+    val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
+    val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
+    // Ring primary quanh avatar vai CHÍNH — cue thị giác tức thì phân biệt
+    // Chính/Phụ ngay cả trước khi đọc badge chữ.
+    val isMain = role.role.equals("Main", ignoreCase = true)
+    val ringColor = if (isMain) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
     ) {
@@ -628,12 +658,13 @@ private fun VoiceRoleCharacterRow(role: PersonVoiceRole) {
             fallback = placeholderPainter,
             modifier = Modifier
                 .size(Dimens.VoiceRoleCharacterBadgeSize)
+                .border(width = Dimens.BorderThin, color = ringColor, shape = CircleShape)
                 .clip(CircleShape),
         )
         Text(
             text = role.characterName,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onBackground,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),

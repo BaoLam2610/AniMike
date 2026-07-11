@@ -25,6 +25,7 @@ import com.lambao.animike.data.local.dao.SeasonYearDao
 import com.lambao.animike.data.local.dao.StreamingLinkDao
 import com.lambao.animike.data.local.dao.StudioDetailDao
 import com.lambao.animike.data.local.dao.TopCharacterDao
+import com.lambao.animike.data.local.dao.TrackingDao
 import com.lambao.animike.data.local.entity.CachedAnimeDetailEntity
 import com.lambao.animike.data.local.entity.CachedAnimeListEntity
 import com.lambao.animike.data.local.entity.CachedAnimeStaffMemberEntity
@@ -48,6 +49,7 @@ import com.lambao.animike.data.local.entity.CachedStreamingLinkEntity
 import com.lambao.animike.data.local.entity.CachedStudioDetailEntity
 import com.lambao.animike.data.local.entity.CachedTopCharacterEntity
 import com.lambao.animike.data.local.entity.FavoriteEntity
+import com.lambao.animike.data.local.entity.TrackingEntity
 
 @Database(
     entities = [
@@ -74,8 +76,9 @@ import com.lambao.animike.data.local.entity.FavoriteEntity
         CachedAnimeStaffMemberEntity::class,
         CachedStudioDetailEntity::class,
         CachedTopCharacterEntity::class,
+        TrackingEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -102,4 +105,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun animeStaffDao(): AnimeStaffDao
     abstract fun studioDetailDao(): StudioDetailDao
     abstract fun topCharacterDao(): TopCharacterDao
+    abstract fun trackingDao(): TrackingDao
 }

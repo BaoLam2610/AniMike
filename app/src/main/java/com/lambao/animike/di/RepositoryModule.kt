@@ -18,6 +18,8 @@ import com.lambao.animike.data.repository.SeasonArchiveRepository
 import com.lambao.animike.data.repository.SeasonArchiveRepositoryImpl
 import com.lambao.animike.data.repository.StudioDetailRepository
 import com.lambao.animike.data.repository.StudioDetailRepositoryImpl
+import com.lambao.animike.data.repository.TrackingRepository
+import com.lambao.animike.data.repository.TrackingRepositoryImpl
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -63,4 +65,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindStudioDetailRepository(impl: StudioDetailRepositoryImpl): StudioDetailRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindTrackingRepository(impl: TrackingRepositoryImpl): TrackingRepository
 }

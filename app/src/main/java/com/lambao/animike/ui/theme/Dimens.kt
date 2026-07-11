@@ -61,11 +61,15 @@ object Dimens {
     // version") + có dòng subtitle bài hát/nghệ sĩ cho MV.
     val VideoCardWidth = 200.dp
 
-    // "Vai diễn lồng tiếng" ở People Detail (MVP5) — thumbnail "duo" ghép ảnh
-    // anime (poster 2:3 thu nhỏ) + avatar nhân vật đè góc dưới-phải.
-    val VoiceRoleThumbnailWidth = 48.dp
-    val VoiceRoleThumbnailHeight = 64.dp
+    // "Vai diễn lồng tiếng" ở People Detail (MVP5) — card nhóm theo anime:
+    // poster 2:3 bên trái + các dòng nhân vật (avatar tròn) bên phải.
+    val VoiceRoleGroupPosterWidth = 64.dp
+    val VoiceRoleGroupPosterHeight = 96.dp
     val VoiceRoleCharacterBadgeSize = 32.dp
+
+    // Viền mảnh (ring quanh avatar, divider...) — thay cho hardcode 2.dp rải
+    // rác (góp ý từ review).
+    val BorderThin = 2.dp
 
     // Logo studio ở Studio Detail (MVP5) — ContentScale.Fit trong card surface,
     // to hơn AvatarSize vì là điểm nhấn chính của màn.

@@ -38,6 +38,12 @@ val ColorScheme.success: Color
 // vì là màu ngữ nghĩa cố định (medal), không map vào role M3 nào.
 val ColorScheme.rankGold: Color
     get() = RankGold
+
+// Alias semantic cho trạng thái "cảnh báo nhẹ" (VD "Tạm dừng" của MVP6
+// tracking) — cùng giá trị RankGold nhưng tách tên để đổi màu medal sau này
+// không vô tình kéo theo màu warning (góp ý từ review).
+val ColorScheme.warning: Color
+    get() = RankGold
 val ColorScheme.rankSilver: Color
     get() = RankSilver
 val ColorScheme.rankBronze: Color

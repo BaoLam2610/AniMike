@@ -21,9 +21,9 @@ import com.lambao.animike.ui.theme.Dimens
 // nổi trên nội dung cuộn nên cần tương phản mạnh hơn để không lẫn vào nền).
 // Trích xuất từ DetailScreen.kt khi Person Detail cũng cần (2 nơi dùng).
 @Composable
-fun ScrollToTopButton(onClick: () -> Unit) {
+fun ScrollToTopButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(Dimens.IconButtonSize)
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.primary)

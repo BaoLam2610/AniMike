@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.lambao.animike.data.repository.AnimeDetailRepository
 import com.lambao.animike.data.repository.ApiResult
 import com.lambao.animike.data.repository.FavoriteRepository
+import com.lambao.animike.data.repository.TrackingRepository
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.toUserMessage
 import com.lambao.animike.ui.base.BaseViewModel
@@ -22,6 +23,7 @@ class DetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: AnimeDetailRepository,
     private val favoriteRepository: FavoriteRepository,
+    private val trackingRepository: TrackingRepository,
 ) : BaseViewModel<DetailState, DetailEvent, DetailEffect>(DetailState()) {
 
     private val malId: Int = checkNotNull(savedStateHandle[Routes.DETAIL_ARG_MAL_ID])
@@ -31,6 +33,7 @@ class DetailViewModel @Inject constructor(
     private val loadMutex = Mutex()
     private var loadJob: Job? = null
     private var favoriteJob: Job? = null
+    private var trackingJob: Job? = null
 
     init {
         // Room là nguồn hiển thị duy nhất cho detail — collect Flow suốt vòng
@@ -46,6 +49,7 @@ class DetailViewModel @Inject constructor(
         observeStreamingLinks()
         observeVideos()
         observeFavoriteStatus()
+        observeWatchStatus()
         loadJob = viewModelScope.launch { loadAll() }
     }
 
@@ -91,6 +95,25 @@ class DetailViewModel @Inject constructor(
                             score = detail.score,
                             year = detail.year,
                         ),
+                    )
+                }
+            }
+
+            is DetailEvent.OnWatchStatusSelected -> {
+                // Chặn double-tap như OnFavoriteClick — tránh 2 lần toggle
+                // gần đồng thời tự triệt tiêu nhau.
+                if (trackingJob?.isActive == true) return
+                val detail = currentState().detail ?: return
+                trackingJob = viewModelScope.launch {
+                    trackingRepository.toggleStatus(
+                        Anime(
+                            malId = detail.malId,
+                            title = detail.title,
+                            imageUrl = detail.imageUrl,
+                            score = detail.score,
+                            year = detail.year,
+                        ),
+                        event.status,
                     )
                 }
             }
@@ -196,6 +219,14 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             favoriteRepository.observeIsFavorite(malId).collect { isFavorite ->
                 setState { copy(isFavorite = isFavorite) }
+            }
+        }
+    }
+
+    private fun observeWatchStatus() {
+        viewModelScope.launch {
+            trackingRepository.observeTracking(malId).collect { tracked ->
+                setState { copy(watchStatus = tracked?.status) }
             }
         }
     }
