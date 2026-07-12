@@ -1,6 +1,5 @@
 package com.lambao.animike.data.repository
 
-import android.util.Log
 import androidx.paging.PagingSource
 import com.lambao.animike.data.local.CacheTtl
 import com.lambao.animike.data.local.dao.AnimeDetailDao
@@ -13,6 +12,7 @@ import com.lambao.animike.data.local.isExpired
 import com.lambao.animike.data.remote.JikanApi
 import com.lambao.animike.data.remote.dto.AnimeDto
 import com.lambao.animike.data.remote.dto.JikanListResponse
+import com.lambao.animike.debug.AppLog
 import com.lambao.animike.domain.mapper.toDomain
 import com.lambao.animike.domain.mapper.toEntity
 import com.lambao.animike.domain.mapper.toListEntity
@@ -121,7 +121,7 @@ class AnimeRepositoryImpl @Inject constructor(
             // cả" (không Paging 3) sẽ âm thầm thiếu dữ liệu — log để biết sớm
             // thay vì im lặng mãi mãi.
             if (response.pagination?.hasNextPage == true) {
-                Log.w(TAG, "/watch/episodes/popular bất ngờ có has_next_page=true — cần xem lại giả định không phân trang")
+                AppLog.w(TAG, "/watch/episodes/popular bất ngờ có has_next_page=true — cần xem lại giả định không phân trang")
             }
             val releases = response.data.mapNotNull { it.toDomain() }.distinctBy { it.malId }
             val fetchedAt = System.currentTimeMillis()
@@ -204,7 +204,7 @@ class AnimeRepositoryImpl @Inject constructor(
             val mapped = call().data.map { it.toDomain() }
             val deduped = mapped.distinctBy { it.malId }
             if (deduped.size != mapped.size) {
-                Log.w(TAG, "Jikan trả ${mapped.size - deduped.size} mal_id trùng lặp trong 1 response")
+                AppLog.w(TAG, "Jikan trả ${mapped.size - deduped.size} mal_id trùng lặp trong 1 response")
             }
             val fetchedAt = System.currentTimeMillis()
             val entities = deduped.mapIndexed { index, anime -> anime.toListEntity(listKey, index, fetchedAt) }

@@ -58,4 +58,45 @@ interface TrackingDao {
             )
         }
     }
+
+    // MVP6 Đợt 2 — set tiến độ tập, giữ nguyên status/personalScore hiện có
+    // (snapshot KHÔNG mang 3 field tracking, xem Anime.toTrackingSnapshot).
+    // episodesWatched=null nghĩa là "bỏ tiến độ" (stepper lùi về 0).
+    @Transaction
+    suspend fun updateEpisodesWatched(snapshot: TrackingEntity, episodesWatched: Int?) {
+        val current = getOnce(snapshot.malId)
+        val merged = (current ?: snapshot).copy(
+            title = snapshot.title,
+            imageUrl = snapshot.imageUrl,
+            score = snapshot.score,
+            year = snapshot.year,
+            episodesWatched = episodesWatched,
+            updatedAt = snapshot.updatedAt,
+        )
+        if (merged.status == null && merged.episodesWatched == null && merged.personalScore == null) {
+            delete(snapshot.malId)
+        } else {
+            upsert(merged)
+        }
+    }
+
+    // MVP6 Đợt 2 — set điểm cá nhân, giữ nguyên status/episodesWatched hiện
+    // có. personalScore=null nghĩa là "xoá điểm đã chấm".
+    @Transaction
+    suspend fun updatePersonalScore(snapshot: TrackingEntity, personalScore: Int?) {
+        val current = getOnce(snapshot.malId)
+        val merged = (current ?: snapshot).copy(
+            title = snapshot.title,
+            imageUrl = snapshot.imageUrl,
+            score = snapshot.score,
+            year = snapshot.year,
+            personalScore = personalScore,
+            updatedAt = snapshot.updatedAt,
+        )
+        if (merged.status == null && merged.episodesWatched == null && merged.personalScore == null) {
+            delete(snapshot.malId)
+        } else {
+            upsert(merged)
+        }
+    }
 }

@@ -41,6 +41,9 @@ data class DetailState(
     val isFavorite: Boolean = false,
     // MVP6 Tracking — trạng thái xem hiện tại của user (null = chưa theo dõi).
     val watchStatus: WatchStatus? = null,
+    // MVP6 Đợt 2 — tiến độ tập đã xem tới + điểm cá nhân (null = chưa set).
+    val episodesWatched: Int? = null,
+    val personalScore: Int? = null,
     // Pull-to-refresh (docs/ROADMAP.md mục 3b) — force refresh detail +
     // recommendations/reviews/pictures bất kể TTL. Episodes không cần "force"
     // vì nó vốn đã luôn gọi lại API ở mọi lần loadAll().
@@ -75,6 +78,14 @@ data class DetailState(
                 base
             }
         }
+
+    // MVP6 Đợt 2 — cùng lý do availableWatchStatuses: phim CHƯA chiếu thì
+    // chưa có gì để chấm điểm, ẩn hẳn UI chấm điểm ở HeroHeader (badge/nút
+    // "Bạn: N" luôn nổi trên hero bất kể section Episodes có rỗng hay
+    // không, nên cần gate riêng — khác tiến độ tập vốn tự ẩn theo
+    // AnimatedVisibility của EpisodesSection khi episodes rỗng).
+    val canRatePersonally: Boolean
+        get() = detail != null && !detail.status.equals(JIKAN_STATUS_NOT_YET_AIRED, ignoreCase = true)
 }
 
 // Jikan/MAL `status` là 1 trong 3 chuỗi cố định: "Not yet aired" |
@@ -96,6 +107,11 @@ sealed interface DetailEvent {
     // Chọn 1 trạng thái trong menu của WatchStatusButton (TopBar) — chọn lại
     // đúng trạng thái đang set = bỏ theo dõi (toggle-off, TrackingRepository).
     data class OnWatchStatusSelected(val status: WatchStatus) : DetailEvent
+    // MVP6 Đợt 2 — stepper +/- ở EpisodesSection, truyền thẳng giá trị tuyệt
+    // đối mới (ĐÃ clamp ở UI theo tổng số tập biết được). 0 nghĩa là bỏ tiến độ.
+    data class OnEpisodeProgressChanged(val episodesWatched: Int) : DetailEvent
+    // Xác nhận trong PersonalScoreDialog — null nghĩa là bấm "Xoá điểm".
+    data class OnPersonalScoreSelected(val score: Int?) : DetailEvent
     data class OnRecommendationClick(val malId: Int) : DetailEvent
     data object OnSeeAllEpisodesClick : DetailEvent
     data object OnSeeAllCharactersClick : DetailEvent

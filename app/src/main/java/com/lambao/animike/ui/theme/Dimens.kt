@@ -74,4 +74,14 @@ object Dimens {
     // Logo studio ở Studio Detail (MVP5) — ContentScale.Fit trong card surface,
     // to hơn AvatarSize vì là điểm nhấn chính của màn.
     val StudioLogoSize = 120.dp
+
+    // Nút −/+ tiến độ tập (MVP6 Đợt 2, EpisodesSection) — nhỏ hơn
+    // IconButtonSize (40dp) vì nằm INLINE cạnh text, không phải icon toolbar.
+    val StepperButtonSize = 28.dp
+
+    // FAB nổi mở màn Debug (chỉ DEBUG build, kéo-thả được) — cỡ FAB nhỏ M3.
+    val DebugFabSize = 48.dp
+    // Lề đáy vị trí nghỉ của FAB Debug — né bottom nav bar (~80dp) + lề, để FAB
+    // không đè lên tab "Danh sách" ở Home (góp ý user).
+    val DebugFabBottomPadding = 96.dp
 }

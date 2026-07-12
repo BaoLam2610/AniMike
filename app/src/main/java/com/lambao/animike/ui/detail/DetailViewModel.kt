@@ -7,6 +7,7 @@ import com.lambao.animike.data.repository.ApiResult
 import com.lambao.animike.data.repository.FavoriteRepository
 import com.lambao.animike.data.repository.TrackingRepository
 import com.lambao.animike.domain.model.Anime
+import com.lambao.animike.domain.model.AnimeDetail
 import com.lambao.animike.domain.model.toUserMessage
 import com.lambao.animike.ui.base.BaseViewModel
 import com.lambao.animike.ui.navigation.Routes
@@ -35,6 +36,16 @@ class DetailViewModel @Inject constructor(
     private var favoriteJob: Job? = null
     private var trackingJob: Job? = null
 
+    // MVP6 Đợt 2 — join() (KHÔNG cancelAndJoin) trước khi ghi lượt kế tiếp:
+    // 2 event này set giá trị TUYỆT ĐỐI tính từ state hiện tại (clampedWatched
+    // ± 1), nên nếu bấm nhanh hơn 1 vòng round-trip Room, phải đợi lượt trước
+    // ghi xong mới ghi lượt sau — nếu không, 2 write gần như đồng thời trên
+    // executor Room có thể commit sai thứ tự (mất 1 lượt tap, phát hiện qua
+    // review). Khác favoriteJob/trackingJob ở trên (bỏ qua tap khi đang bận)
+    // vì đây không phải toggle nên không thể chỉ đơn giản "chặn tap".
+    private var progressJob: Job? = null
+    private var scoreJob: Job? = null
+
     init {
         // Room là nguồn hiển thị duy nhất cho detail — collect Flow suốt vòng
         // đời màn hình; loadAll() chỉ quyết định KHI NÀO gọi API. Riêng
@@ -49,7 +60,7 @@ class DetailViewModel @Inject constructor(
         observeStreamingLinks()
         observeVideos()
         observeFavoriteStatus()
-        observeWatchStatus()
+        observeTracking()
         loadJob = viewModelScope.launch { loadAll() }
     }
 
@@ -87,15 +98,7 @@ class DetailViewModel @Inject constructor(
                 if (favoriteJob?.isActive == true) return
                 val detail = currentState().detail ?: return
                 favoriteJob = viewModelScope.launch {
-                    favoriteRepository.toggleFavorite(
-                        Anime(
-                            malId = detail.malId,
-                            title = detail.title,
-                            imageUrl = detail.imageUrl,
-                            score = detail.score,
-                            year = detail.year,
-                        ),
-                    )
+                    favoriteRepository.toggleFavorite(detail.toAnimeSnapshot())
                 }
             }
 
@@ -105,16 +108,29 @@ class DetailViewModel @Inject constructor(
                 if (trackingJob?.isActive == true) return
                 val detail = currentState().detail ?: return
                 trackingJob = viewModelScope.launch {
-                    trackingRepository.toggleStatus(
-                        Anime(
-                            malId = detail.malId,
-                            title = detail.title,
-                            imageUrl = detail.imageUrl,
-                            score = detail.score,
-                            year = detail.year,
-                        ),
-                        event.status,
-                    )
+                    trackingRepository.toggleStatus(detail.toAnimeSnapshot(), event.status)
+                }
+            }
+
+            is DetailEvent.OnEpisodeProgressChanged -> {
+                // join() (không phải guard bỏ-qua) — set giá trị TUYỆT ĐỐI tính
+                // từ state hiện tại, nên phải đợi lượt trước ghi xong rồi mới
+                // ghi lượt sau để không mất tap khi bấm nhanh (xem comment ở
+                // khai báo progressJob).
+                val detail = currentState().detail ?: return
+                val previous = progressJob
+                progressJob = viewModelScope.launch {
+                    previous?.join()
+                    trackingRepository.updateEpisodesWatched(detail.toAnimeSnapshot(), event.episodesWatched)
+                }
+            }
+
+            is DetailEvent.OnPersonalScoreSelected -> {
+                val detail = currentState().detail ?: return
+                val previous = scoreJob
+                scoreJob = viewModelScope.launch {
+                    previous?.join()
+                    trackingRepository.updatePersonalScore(detail.toAnimeSnapshot(), event.score)
                 }
             }
 
@@ -223,10 +239,16 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    private fun observeWatchStatus() {
+    private fun observeTracking() {
         viewModelScope.launch {
             trackingRepository.observeTracking(malId).collect { tracked ->
-                setState { copy(watchStatus = tracked?.status) }
+                setState {
+                    copy(
+                        watchStatus = tracked?.status,
+                        episodesWatched = tracked?.episodesWatched,
+                        personalScore = tracked?.personalScore,
+                    )
+                }
             }
         }
     }
@@ -284,3 +306,14 @@ class DetailViewModel @Inject constructor(
         loadMutex.withLock { repository.refreshVideos(malId, force) }
     }
 }
+
+// Snapshot dùng chung cho mọi lệnh gọi FavoriteRepository/TrackingRepository
+// (4 call site ở trên đều cần) — tránh lặp lại y hệt Anime(...) và drift khi
+// AnimeDetail/Anime đổi field.
+private fun AnimeDetail.toAnimeSnapshot(): Anime = Anime(
+    malId = malId,
+    title = title,
+    imageUrl = imageUrl,
+    score = score,
+    year = year,
+)

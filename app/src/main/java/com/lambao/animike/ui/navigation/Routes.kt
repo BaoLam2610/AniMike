@@ -51,6 +51,15 @@ object Routes {
     const val COMMUNITY_RECOMMENDATIONS = "communityRecommendations"
     // "Xem tất cả" của "Nhân vật nổi bật" (MVP5) — không có arg, Paging 3 riêng.
     const val TOP_CHARACTERS = "topCharacters"
+    // Màn Debug (FAB nổi, CHỈ đăng ký + hiện ở DEBUG build — xem AniMikeNavHost).
+    const val DEBUG = "debug"
+    // Chi tiết 1 request (tab API) — id = NetworkLogEntry.id (Long).
+    const val DEBUG_NETWORK_DETAIL = "debug/network/{id}"
+    const val DEBUG_NETWORK_DETAIL_ARG_ID = "id"
+    // Chi tiết 1 bảng cache (schema + dòng mẫu) — name là tên bảng (định danh
+    // đơn giản, không có ký tự cần encode).
+    const val DEBUG_TABLE_DETAIL = "debug/table/{name}"
+    const val DEBUG_TABLE_DETAIL_ARG_NAME = "name"
 
     fun detail(malId: Int) = "detail/$malId"
     fun episodes(malId: Int) = "episodes/$malId"
@@ -59,6 +68,8 @@ object Routes {
     fun personDetail(personId: Int) = "person/$personId"
     fun studioDetail(studioId: Int) = "studio/$studioId"
     fun reviews(malId: Int) = "reviews/$malId"
+    fun debugNetworkDetail(id: Long) = "debug/network/$id"
+    fun debugTableDetail(name: String) = "debug/table/$name"
     // Nhận enum thay vì String thô — compiler bảo đảm route luôn round-trip
     // được qua AnimeListSource.valueOf ở AnimeListViewModel.
     fun animeList(source: AnimeListSource) = "animeList/${source.name}"

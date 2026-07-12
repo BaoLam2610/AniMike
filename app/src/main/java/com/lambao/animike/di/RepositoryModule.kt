@@ -6,6 +6,8 @@ import com.lambao.animike.data.repository.AnimeRepository
 import com.lambao.animike.data.repository.AnimeRepositoryImpl
 import com.lambao.animike.data.repository.CharacterDetailRepository
 import com.lambao.animike.data.repository.CharacterDetailRepositoryImpl
+import com.lambao.animike.data.repository.DebugRepository
+import com.lambao.animike.data.repository.DebugRepositoryImpl
 import com.lambao.animike.data.repository.FavoriteRepository
 import com.lambao.animike.data.repository.FavoriteRepositoryImpl
 import com.lambao.animike.data.repository.PersonDetailRepository
@@ -69,4 +71,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindTrackingRepository(impl: TrackingRepositoryImpl): TrackingRepository
+
+    // MVP-Debug — chỉ dùng ở màn Debug (gate BuildConfig.DEBUG); bind chung ở
+    // đây cho đơn giản, ở release là dead code không reachable.
+    @Binds
+    @Singleton
+    abstract fun bindDebugRepository(impl: DebugRepositoryImpl): DebugRepository
 }

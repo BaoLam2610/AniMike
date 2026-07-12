@@ -2,6 +2,7 @@ package com.lambao.animike.di
 
 import com.lambao.animike.BuildConfig
 import com.lambao.animike.data.remote.JikanApi
+import com.lambao.animike.data.remote.interceptor.DebugNetworkInterceptor
 import com.lambao.animike.data.remote.interceptor.RateLimitInterceptor
 import com.lambao.animike.data.remote.interceptor.RetryInterceptor
 import dagger.Module
@@ -39,6 +40,11 @@ object NetworkModule {
             .addInterceptor(RateLimitInterceptor())
 
         if (BuildConfig.DEBUG) {
+            // DebugNetworkInterceptor đứng TRƯỚC HttpLoggingInterceptor (thêm
+            // trước = bọc ngoài hơn) nhưng vẫn nằm SAU Retry/RateLimit — ghi
+            // vào DebugInspector mỗi attempt để tab "API" của màn Debug soi
+            // được. HttpLoggingInterceptor vẫn giữ để xem BODY trong Logcat.
+            builder.addInterceptor(DebugNetworkInterceptor())
             builder.addInterceptor(
                 HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY },
             )

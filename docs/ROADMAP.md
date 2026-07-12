@@ -1,7 +1,7 @@
 # AniMike — Roadmap & Quy trình phát triển
 
 Hiện trạng project: Kotlin + Jetpack Compose (Material 3), minSdk 24, targetSdk 36.
-Đã hoàn thành Phase 0a → MVP 5 (Nhân vật / Người / Studio) — tiếp theo là MVP 6 (Tracking local).
+Đã hoàn thành Phase 0a → MVP 6 (Tracking local) — tiếp theo xem mục "Xa hơn".
 
 **Skills & agents đã cài trong `.claude/`** (Claude Code tự nhận, xem `CLAUDE.md` ở root):
 - `skills/compose-expert` — guide Compose chuyên sâu (24 references + source androidx)
@@ -708,13 +708,116 @@ Detail, People/Seiyuu Detail, Studio Detail, Top nhân vật. Tiếp theo: MVP 6
     tracking) — mọi bump schema từ đây phải viết Migration thật
     (AutoMigration được), KHÔNG dựa destructive fallback nữa (sẽ xoá sạch
     tracking user tích lũy). Comment cảnh báo đã đặt tại DatabaseModule.
-- [ ] **Đợt 2 — Tập đã xem + điểm cá nhân** (cột Room đã khai sẵn ở đợt 1):
-  tiến độ "đã xem tới tập N" (stepper + progress bar ở EpisodesSection,
-  KHÔNG đánh dấu từng tập rời — Jikan không có id tập ổn định); điểm cá nhân
-  1-10 (dialog slider + emoji phản hồi theo mức, hiện cạnh điểm MAL ở hero).
+- [x] **Đợt 2 — Tập đã xem + điểm cá nhân** ✅ (cột Room đã khai sẵn ở đợt 1 —
+  KHÔNG bump DB version, vẫn v17):
+  - **Data**: `TrackingDao.updateEpisodesWatched`/`updatePersonalScore` (2 hàm
+    `@Transaction` mới, cùng pattern `toggleStatus`) — merge giá trị cần đổi
+    với row hiện có, giữ nguyên 2 cột tracking còn lại, xoá row nếu cả 3 cột
+    về null. `Anime.toTrackingSnapshot()` (mapper mới) — snapshot KHÔNG mang
+    theo status/episodesWatched/personalScore (khác `toTrackingEntity` dành
+    riêng cho `toggleStatus`), dùng làm candidate merge cho 2 hàm trên.
+    `episodesWatched<=0` và `personalScore=null` đều nghĩa là "bỏ" (không lưu
+    0, lưu null).
+  - **Tiến độ tập** — `EpisodeProgressRow` trong `EpisodesSection`: "Tiến độ:
+    X/Y tập" + stepper −/+ (ghi giá trị TUYỆT ĐỐI, không phải delta) + thanh
+    ngang (tái dùng style `ScoreBarHeight` của "Thống kê" ở ReviewsScreen).
+    Tự ẩn theo `AnimatedVisibility` sẵn có của `EpisodesSection` khi
+    `episodes` rỗng (phim chưa chiếu) — KHÔNG cần gate riêng như điểm cá nhân.
+  - **Điểm cá nhân** — badge "Bạn: N" (màu primary, cạnh badge "★ MAL" màu
+    tertiary) trong `HeroHeader`, gate bởi `DetailState.canRatePersonally`
+    (cùng luật `JIKAN_STATUS_NOT_YET_AIRED` với `availableWatchStatuses` —
+    hero luôn render bất kể `episodes` rỗng hay không nên PHẢI gate riêng,
+    khác tiến độ tập). Bấm mở `PersonalScoreDialog` compact (dialog CĂN GIỮA
+    mặc định, KHÁC `PictureViewerDialog` full-screen) — `Slider` M3 1-10
+    nguyên (`steps=8`), emoji phản hồi đổi live theo mức đang kéo (1-3 😞,
+    4-6 😐, 7-8 🙂, 9-10 🤩), nút "Xoá điểm" chỉ hiện khi đã từng chấm.
+  - **ViewModel**: `observeWatchStatus()` đổi tên `observeTracking()` (giờ
+    set cả 3 field từ 1 Flow). 2 event handler mới KHÔNG dùng job-guard
+    "bỏ-qua-tap" như `OnFavoriteClick`/`OnWatchStatusSelected` (toggle) mà
+    dùng `previous?.join()` (chain tuần tự, KHÔNG cancel) — set giá trị tuyệt
+    đối tính từ state hiện tại nên phải đợi lượt trước ghi xong mới ghi lượt
+    sau, tránh mất tap khi bấm nhanh.
+  - **Review clean, đã sửa 1 blocker + 3 mục 🟡**: (blocker) `total` của
+    `EpisodeProgressRow` truyền THẲNG `detail.episodes` (Int? — có thể null
+    khi Jikan CHƯA biết tổng số tập của anime đang chiếu dài kỳ), KHÔNG
+    fallback `episodes.size` như bản đầu — `episodes` trong `DetailState` chỉ
+    là trang 1 của `/episodes`, dùng làm mẫu số/trần stepper sẽ khoá "+" sai
+    trước khi user xem hết; khi `total == null` giờ hiện "Đã xem: N tập"
+    (không mẫu số/progress bar) và "+" không bị khoá trần. (🟡) thêm
+    `progressJob`/`scoreJob` + `previous?.join()` để tránh 2 write gần như
+    đồng thời commit sai thứ tự lúc bấm stepper nhanh; (🟡) `DetailScreen`
+    giờ `remember(viewModel) { viewModel::onEvent }` thay vì tạo bound
+    reference mới mỗi lần recompose (rõ hơn từ Đợt 2 vì state đổi liên tục
+    hơn khi bấm stepper/chấm điểm); (🟡) gộp 4 chỗ dựng `Anime` từ `detail`
+    giống hệt nhau (Favorite/WatchStatus/Progress/Score) thành 1 helper
+    `AnimeDetail.toAnimeSnapshot()`.
+
+**→ MVP 6 (Tracking local) HOÀN THÀNH ✅** — 2/2 đợt: Trạng thái xem, Tiến độ
+tập + điểm cá nhân.
+
+### Công cụ nội bộ — Debug menu (không thuộc FEATURES.md, chỉ DEBUG build)
+- [x] **Đợt 1 — FAB Debug + màn 3 tab** ✅ (chỉ hiện/đăng ký khi
+  `BuildConfig.DEBUG`, release là dead code không reachable):
+  - **Hạ tầng thu thập** (`debug/` package, `object` thuần không Hilt để cả
+    interceptor lẫn global logger chạm tới được): `DebugInspector` giữ 2
+    ring-buffer RAM (cap 200 entry, mới nhất ở đầu, `MutableStateFlow.update{}`
+    atomic nên thread-safe). `DebugNetworkInterceptor` cắm vào NetworkModule
+    SAU Retry/RateLimit (ghi mỗi attempt, đo đúng thời gian HTTP; dùng
+    `response.peekBody` để KHÔNG tiêu thụ stream gốc). `AppLog` wrapper thay
+    **toàn bộ 11 lời gọi `android.util.Log`** rải rác (repository +
+    Detail/Studio screen) — vừa Logcat vừa append buffer, append bị bỏ qua ở
+    release.
+  - **Tab API**: list request (code/method/thời gian/url), bấm expand xem
+    req/resp body (monospace). **Tab Log local**: list log tô màu theo level,
+    expand xem stack trace. **Tab Cache**: đếm số row từng bảng (query generic
+    qua `sqlite_master`, tự bắt kịp khi thêm entity), nút "Xoá cache" (LOẠI
+    TRỪ favorite/tracking — dữ liệu user thật v17) + xoá từng bảng có
+    AlertDialog confirm (cảnh báo đậm cho bảng user-data). `DebugRepository`
+    truy cập `openHelper.writableDatabase` (lưu ý: bỏ qua invalidation tracker
+    — chấp nhận cho tool debug, mở lại màn là thấy).
+  - **FAB kéo-thả** ở Scaffold cấp cao nhất `AniMikeNavHost` (nổi trên mọi
+    màn, offset tích luỹ theo drag), route `debug` + FAB đều gate
+    `BuildConfig.DEBUG`. MVI đầy đủ (`DebugContract`/`ViewModel`/`Screen`).
+  - **Review clean (không blocker), đã sửa 3 mục 🟡 + vài 🟢**: FAB dùng
+    `launchSingleTop` + ẩn khi đang ở màn Debug (khỏi đẩy trùng đích lên
+    backstack); offset FAB đổi sang `rememberSaveable` + kẹp trong biên parent
+    (kéo ra ngoài màn là mất nút); `loadStats()` bọc try/catch-finally + spinner
+    khi load lần đầu (raw SQL có thể ném, không để `isLoadingStats` kẹt true);
+    thêm a11y (`Role.Button` + onClickLabel) cho card expand; đổi tên
+    `MAX_BODY_CHARS`→`MAX_BODY_BYTES` (peekBody đếm byte).
+- [x] **Đợt 2 — Chi tiết + search + xem dữ liệu cache** ✅ (góp ý user sau khi
+  dùng thử Đợt 1):
+  - **FAB đẩy cao** né bottom nav bar (token `DebugFabBottomPadding`).
+  - **Search mỗi tab**: `DebugSearchBar` (OutlinedTextField) — API lọc theo
+    URL/method/code, Log theo tag/message/level, Cache theo tên bảng; query
+    giữ trong `DebugState` (3 field), lọc ở UI qua `remember(list, query)`.
+  - **Màn chi tiết API** (`DebugNetworkDetail*`, tab API đổi click expand-inline
+    → `navigate`): overview (code/method/ms/thời điểm/url) + **headers**
+    request/response (đã bổ sung capture ở `DebugNetworkInterceptor` +
+    `NetworkLogEntry`) + body **pretty JSON** (`DebugFormat.prettyJsonOrRaw` —
+    parse-rồi-encode-lại để khử `\"`/`\/` bị lẫn, không JSON thì raw) + nút
+    **Copy body** + **Copy cURL** (`buildCurl`, clipboard + Toast). Entry đọc
+    từ ring-buffer theo id, bị xoá khi đang xem → "Log đã bị xoá".
+  - **Màn chi tiết bảng cache** (`DebugTableDetail*`, tab Cache click bảng →
+    navigate): **schema** (`PRAGMA table_info`: cột + kiểu + 🔑 PK) + **20 dòng
+    mẫu** (`SELECT * LIMIT 20`, đọc generic theo `Cursor.getType`, BLOB hiện
+    "<blob N B>", value dài cắt maxLines). `DebugRepository.tableDetail`.
+  - 2 route mới `debug/network/{id}` (LongType) + `debug/table/{name}`, đều
+    gate `BuildConfig.DEBUG`.
+  - **Review clean (không blocker), đã sửa 3 🟡 + vài 🟢**: `CacheTab` nhận
+    field lẻ thay vì cả `DebugState` (đứng tab Cache mà log mạng vẫn đẩy state
+    mới → recompose oan); `remember(entry.id)` cho prettyJson/cURL ở màn chi
+    tiết (parse ~8KB không chạy lại mỗi recompose); a11y nút `✕` search
+    (contentDescription + ẩn glyph); `launchSingleTop` cho 2 route detail;
+    `loadJob?.cancel()` chống retry chồng coroutine; key cho itemsIndexed rows.
+  - [ ] **Đợt 3 (nếu cần)**: toggle giả lập 429/timeout + force-network,
+    chỉnh TTL runtime qua DataStore, override base URL.
 
 ### Xa hơn (xem FEATURES.md mục 2-3)
-- Reviews → Manga → Xem profile MAL công khai → Notification lịch chiếu → Widget/Deep link
+- **Section 1 + 2 của FEATURES.md coi như XONG.** Còn lại là Section 3 (v2+):
+- Manga (3.1, endpoint đã research ở `jikan-api/references/manga-endpoints.md`)
+  → Notification lịch chiếu (3.3) → Profile MAL công khai (3.2) → Deep link /
+  Widget / Export-import / Đa ngôn ngữ (3.4)
 
 ## 5. Quy trình làm việc (cho người mới)
 
@@ -722,7 +825,7 @@ Detail, People/Seiyuu Detail, Studio Detail, Top nhân vật. Tiếp theo: MVP 6
 2. **Mỗi tính năng làm theo vòng**: DTO/API → Repository → Contract (State/Event/Effect) → ViewModel → UI → test tay → chạy agent `compose-reviewer` → commit.
 3. **Đừng làm nhiều tính năng cùng lúc** — xong hẳn 1 màn hình rồi mới sang màn tiếp theo.
 4. **Test**: giai đoạn đầu ưu tiên test tay + unit test cho mapper/repository. Chưa cần UI test.
-5. **Debug API**: bật OkHttp logging interceptor (chỉ ở debug build) để xem request/response trong Logcat.
+5. **Debug API**: OkHttp logging interceptor ra Logcat + **FAB Debug 🐞** (chỉ debug build) mở màn 3 tab xem API/log/cache ngay trong app — xem mục "Công cụ nội bộ — Debug menu".
 6. **Phát hành** (khi sẵn sàng): tạo keystore ký app → build AAB → tài khoản Google Play Console ($25 một lần) → internal testing trước, production sau.
 
 ## 6. Tài liệu tham khảo

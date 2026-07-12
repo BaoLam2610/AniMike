@@ -8,7 +8,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -29,6 +28,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,9 +52,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -87,6 +89,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
+import com.lambao.animike.debug.AppLog
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.AnimeCharacter
 import com.lambao.animike.domain.model.AnimeDetail
@@ -113,6 +116,7 @@ import com.lambao.animike.ui.theme.Motion
 import com.lambao.animike.ui.theme.success
 import androidx.core.net.toUri
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @Composable
 fun DetailScreen(
@@ -159,7 +163,7 @@ fun DetailScreen(
                     try {
                         context.startActivity(Intent(Intent.ACTION_VIEW, uri))
                     } catch (e: ActivityNotFoundException) {
-                        Log.w("DetailScreen", "Không có app nào xử lý được link YouTube", e)
+                        AppLog.w("DetailScreen", "Không có app nào xử lý được link YouTube", e)
                     }
                 }
 
@@ -167,7 +171,7 @@ fun DetailScreen(
                     try {
                         context.startActivity(Intent(Intent.ACTION_VIEW, effect.url.toUri()))
                     } catch (e: ActivityNotFoundException) {
-                        Log.w("DetailScreen", "Không có app nào xử lý được link streaming", e)
+                        AppLog.w("DetailScreen", "Không có app nào xử lý được link streaming", e)
                     }
                 }
 
@@ -195,7 +199,14 @@ fun DetailScreen(
         }
     }
 
-    DetailScreenContent(state = state, onBackClick = onBackClick, onEvent = viewModel::onEvent)
+    // remember: viewModel::onEvent là bound reference mới mỗi lần DetailScreen
+    // recompose (không override equals()) — từ Đợt 2, episodesWatched/
+    // personalScore đổi liên tục qua Flow mỗi lần user bấm stepper/chấm điểm,
+    // khiến DetailState recompose thường xuyên hơn hẳn trước đây; nếu không
+    // remember, mọi lambda con capture onEvent sẽ mất khả năng skip theo đó
+    // (phát hiện qua review, sửa).
+    val stableOnEvent = remember(viewModel) { viewModel::onEvent }
+    DetailScreenContent(state = state, onBackClick = onBackClick, onEvent = stableOnEvent)
 }
 
 // DownloadManager (không phải tự đọc byte qua Coil rồi ghi MediaStore) — lưu
@@ -219,10 +230,10 @@ private fun downloadPicture(context: Context, url: String) {
         downloadManager.enqueue(request)
         Toast.makeText(context, "Đang tải ảnh xuống...", Toast.LENGTH_SHORT).show()
     } catch (e: SecurityException) {
-        Log.w("DetailScreen", "Không có quyền tải ảnh xuống", e)
+        AppLog.w("DetailScreen", "Không có quyền tải ảnh xuống", e)
         Toast.makeText(context, "Không thể tải ảnh xuống", Toast.LENGTH_SHORT).show()
     } catch (e: IllegalArgumentException) {
-        Log.w("DetailScreen", "URL ảnh không hợp lệ để tải xuống", e)
+        AppLog.w("DetailScreen", "URL ảnh không hợp lệ để tải xuống", e)
         Toast.makeText(context, "Không thể tải ảnh xuống", Toast.LENGTH_SHORT).show()
     }
 }
@@ -279,6 +290,9 @@ private fun DetailScreenContent(
                         // tabVideos: lọc bỏ video trùng với TrailerCard (xem
                         // comment ở DetailState.tabVideos).
                         videos = state.tabVideos,
+                        episodesWatched = state.episodesWatched,
+                        personalScore = state.personalScore,
+                        canRatePersonally = state.canRatePersonally,
                         listState = listState,
                         onEvent = onEvent,
                     )
@@ -469,11 +483,21 @@ private fun DetailContent(
     themes: AnimeThemes?,
     streamingLinks: List<StreamingLink>,
     videos: List<AnimeVideo>,
+    episodesWatched: Int?,
+    personalScore: Int?,
+    canRatePersonally: Boolean,
     listState: LazyListState,
     onEvent: (DetailEvent) -> Unit,
 ) {
     LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
-        item { HeroHeader(detail = detail) }
+        item {
+            HeroHeader(
+                detail = detail,
+                personalScore = personalScore,
+                canRatePersonally = canRatePersonally,
+                onPersonalScoreSelected = { onEvent(DetailEvent.OnPersonalScoreSelected(it)) },
+            )
+        }
 
         if (detail.genres.isNotEmpty()) {
             item { GenreChips(genres = detail.genres) }
@@ -516,7 +540,10 @@ private fun DetailContent(
         item {
             EpisodesSection(
                 episodes = episodes,
+                episodesWatched = episodesWatched,
+                totalEpisodes = detail.episodes,
                 onSeeAllClick = { onEvent(DetailEvent.OnSeeAllEpisodesClick) },
+                onProgressChanged = { onEvent(DetailEvent.OnEpisodeProgressChanged(it)) },
             )
         }
         item { Spacer(Modifier.height(Dimens.SpaceLg)) }
@@ -570,12 +597,21 @@ private fun DetailContent(
 }
 
 @Composable
-private fun HeroHeader(detail: AnimeDetail) {
+private fun HeroHeader(
+    detail: AnimeDetail,
+    personalScore: Int?,
+    canRatePersonally: Boolean,
+    onPersonalScoreSelected: (Int?) -> Unit,
+) {
     // ColorPainter không override equals() — remember để tránh AsyncImage coi
     // placeholder/error/fallback là "đổi" ở mỗi recomposition.
     val placeholderColor = MaterialTheme.colorScheme.surfaceVariant
     val placeholderPainter = remember(placeholderColor) { ColorPainter(placeholderColor) }
     val background = MaterialTheme.colorScheme.background
+
+    // MVP6 Đợt 2 — state thuần UI (giống viewerIndex ở PicturesSection),
+    // không cần đưa vào DetailState vì chỉ là "dialog đang mở hay không".
+    var showScoreDialog by rememberSaveable { mutableStateOf(false) }
 
     Box(modifier = Modifier
         .fillMaxWidth()
@@ -610,6 +646,11 @@ private fun HeroHeader(detail: AnimeDetail) {
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm)) {
                 if (detail.score != "N/A") HeroScoreBadge(score = detail.score)
+                // MVP6 Đợt 2 — cạnh badge điểm MAL, chỉ hiện khi phim ĐÃ chiếu
+                // (canRatePersonally, xem DetailState). Bấm mở PersonalScoreDialog.
+                if (canRatePersonally) {
+                    PersonalScoreBadge(score = personalScore, onClick = { showScoreDialog = true })
+                }
                 if (detail.isAiring) AiringPill()
             }
             Text(
@@ -623,6 +664,17 @@ private fun HeroHeader(detail: AnimeDetail) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+
+    if (showScoreDialog) {
+        PersonalScoreDialog(
+            initialScore = personalScore,
+            onDismiss = { showScoreDialog = false },
+            onConfirm = { score ->
+                onPersonalScoreSelected(score)
+                showScoreDialog = false
+            },
+        )
     }
 }
 
@@ -651,6 +703,98 @@ private fun HeroScoreBadge(score: String) {
             color = MaterialTheme.colorScheme.tertiary,
         )
     }
+}
+
+// MVP6 Đợt 2 — cùng style HeroScoreBadge (nền surface alpha 80%) nhưng màu
+// primary để phân biệt "điểm MAL" (tertiary) với "điểm của bạn" (primary) —
+// primary cũng là màu chip hành động (StreamingLinksRow) nên gợi ý bấm được.
+@Composable
+private fun PersonalScoreBadge(score: Int?, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(Dimens.RadiusChip))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+            .clickable(
+                onClickLabel = if (score != null) "Sửa điểm cá nhân" else "Chấm điểm",
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .padding(horizontal = Dimens.SpaceSm, vertical = Dimens.SpaceXs),
+    ) {
+        Text(
+            text = if (score != null) "Bạn: $score" else "☆ Chấm điểm",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+// MVP6 Đợt 2 — dialog compact CĂN GIỮA (mặc định usePlatformDefaultWidth),
+// KHÁC PictureViewerDialog full-screen vì đây là widget chấm điểm nhỏ, không
+// phải viewer. Slider 1-10 nguyên, emoji đổi live theo mức đang kéo.
+@Composable
+private fun PersonalScoreDialog(
+    initialScore: Int?,
+    onDismiss: () -> Unit,
+    onConfirm: (Int?) -> Unit,
+) {
+    // Slider chỉ nhận Float — giữ riêng 1 state Float, làm tròn khi hiển thị/lưu.
+    var sliderValue by remember { mutableStateOf((initialScore ?: 7).toFloat()) }
+    val score = sliderValue.roundToInt()
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(Dimens.RadiusSheet))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(Dimens.SpaceLg),
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
+            ) {
+                Text(
+                    text = "Điểm của bạn",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "${scoreEmoji(score)} $score/10",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Slider(
+                    value = sliderValue,
+                    onValueChange = { sliderValue = it },
+                    valueRange = 1f..10f,
+                    // steps=8 -> 10 mốc nguyên (1..10): số mốc = steps+2.
+                    steps = 8,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (initialScore != null) Arrangement.SpaceBetween else Arrangement.End,
+                ) {
+                    if (initialScore != null) {
+                        TextButton(onClick = { onConfirm(null) }) { Text("Xoá điểm") }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm)) {
+                        TextButton(onClick = onDismiss) { Text("Huỷ") }
+                        Button(onClick = { onConfirm(score) }) { Text("Lưu") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Phản hồi cảm xúc theo mức điểm — mốc chọn theo thang 10 quen thuộc của MAL
+// (1-3 tệ, 4-6 tạm, 7-8 tốt, 9-10 xuất sắc).
+private fun scoreEmoji(score: Int): String = when {
+    score <= 3 -> "😞"
+    score <= 6 -> "😐"
+    score <= 8 -> "🙂"
+    else -> "🤩"
 }
 
 @Composable
@@ -1082,7 +1226,13 @@ private const val EPISODES_PREVIEW_LIMIT = 10
 // AnimatedVisibility thay vì early return — cùng lý do với CharactersSection
 // (episodes fetch xong sau detail, "mọc" ra giữa chừng khi đang xem màn).
 @Composable
-private fun EpisodesSection(episodes: List<Episode>, onSeeAllClick: () -> Unit) {
+private fun EpisodesSection(
+    episodes: List<Episode>,
+    episodesWatched: Int?,
+    totalEpisodes: Int?,
+    onSeeAllClick: () -> Unit,
+    onProgressChanged: (Int) -> Unit,
+) {
     AnimatedVisibility(visible = episodes.isNotEmpty()) {
         Column {
             Row(
@@ -1108,6 +1258,17 @@ private fun EpisodesSection(episodes: List<Episode>, onSeeAllClick: () -> Unit) 
                     )
                 }
             }
+            // MVP6 Đợt 2 — tự ẩn theo AnimatedVisibility bên ngoài khi episodes
+            // rỗng (phim chưa chiếu), không cần gate riêng như canRatePersonally.
+            // total truyền THẲNG detail.episodes (KHÔNG fallback episodes.size
+            // — episodes chỉ là trang 1 của /episodes, anime đang chiếu dài kỳ
+            // sẽ có ít hơn tổng số tập thực đã ra mắt, làm sai trần stepper +
+            // mẫu số hiển thị — phát hiện qua review, sửa).
+            EpisodeProgressRow(
+                watched = episodesWatched ?: 0,
+                total = totalEpisodes,
+                onProgressChanged = onProgressChanged,
+            )
             LazyRow(
                 contentPadding = PaddingValues(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceSm),
                 horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm),
@@ -1115,6 +1276,97 @@ private fun EpisodesSection(episodes: List<Episode>, onSeeAllClick: () -> Unit) 
                 items(episodes.take(EPISODES_PREVIEW_LIMIT), key = { it.number }) { episode -> EpisodeItem(episode) }
             }
         }
+    }
+}
+
+// MVP6 Đợt 2 — "Tiến độ: X/Y tập" + thanh ngang (tái dùng style ScoreBar ở
+// ReviewsScreen) + stepper −/+ ghi giá trị TUYỆT ĐỐI (không phải delta) để
+// ViewModel không cần đọc lại state hiện tại khi xử lý event. total=null khi
+// Jikan CHƯA biết tổng số tập (anime đang chiếu dài kỳ) — không có mẫu số/
+// progress bar, nút "+" KHÔNG bị khoá trần (khác trường hợp biết total).
+@Composable
+private fun EpisodeProgressRow(watched: Int, total: Int?, onProgressChanged: (Int) -> Unit) {
+    if (total != null && total <= 0) return
+    val clampedWatched = if (total != null) watched.coerceIn(0, total) else watched.coerceAtLeast(0)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Dimens.ScreenPadding, vertical = Dimens.SpaceXs),
+        verticalArrangement = Arrangement.spacedBy(Dimens.SpaceXs),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (total != null) "Tiến độ: $clampedWatched/$total tập" else "Đã xem: $clampedWatched tập",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.SpaceSm)) {
+                ProgressStepperButton(
+                    symbol = "−",
+                    contentDescription = "Giảm tiến độ",
+                    enabled = clampedWatched > 0,
+                    onClick = { onProgressChanged(clampedWatched - 1) },
+                )
+                ProgressStepperButton(
+                    symbol = "+",
+                    contentDescription = "Tăng tiến độ",
+                    enabled = total == null || clampedWatched < total,
+                    onClick = { onProgressChanged(clampedWatched + 1) },
+                )
+            }
+        }
+        if (total != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(Dimens.ScoreBarHeight)
+                    .clip(RoundedCornerShape(Dimens.ScoreBarHeight / 2))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction = clampedWatched / total.toFloat())
+                        .clip(RoundedCornerShape(Dimens.ScoreBarHeight / 2))
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgressStepperButton(
+    symbol: String,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val contentColor = if (enabled) {
+        MaterialTheme.colorScheme.onBackground
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+    }
+    Box(
+        modifier = Modifier
+            .size(Dimens.StepperButtonSize)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(enabled = enabled, onClickLabel = contentDescription, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = symbol,
+            style = MaterialTheme.typography.titleMedium,
+            color = contentColor,
+            // Box cha đã có onClickLabel mô tả hành động — ẩn glyph khỏi TalkBack.
+            modifier = Modifier.clearAndSetSemantics {},
+        )
     }
 }
 

@@ -7,7 +7,16 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -16,9 +25,24 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import com.lambao.animike.BuildConfig
+import com.lambao.animike.ui.debug.DebugNetworkDetailScreen
+import com.lambao.animike.ui.debug.DebugScreen
+import com.lambao.animike.ui.debug.DebugTableDetailScreen
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
@@ -50,7 +74,9 @@ import com.lambao.animike.ui.search.SearchScreen
 import com.lambao.animike.ui.search.SearchViewModel
 import com.lambao.animike.ui.studiodetail.StudioDetailScreen
 import com.lambao.animike.ui.topcharacters.TopCharactersScreen
+import com.lambao.animike.ui.theme.Dimens
 import com.lambao.animike.ui.theme.Motion
+import kotlin.math.roundToInt
 
 private data class BottomNavItem(val route: String, val label: String, val icon: String)
 
@@ -181,6 +207,10 @@ fun AniMikeNavHost() {
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
+    // Box bọc ngoài Scaffold để FAB Debug nổi trên MỌI màn (sibling của
+    // Scaffold, không cuộn/không phụ thuộc màn hiện tại). Chỉ dựng ở DEBUG
+    // build — release không có FAB lẫn route debug.
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         bottomBar = {
             // Bottom nav chỉ hiện ở 4 tab gốc, fade mượt khi push sang Detail
@@ -261,6 +291,36 @@ fun AniMikeNavHost() {
                     onBackClick = navController::popBackStack,
                     onNavigateToCharacterDetail = { characterId -> navController.navigateToCharacterDetail(characterId) },
                 )
+            }
+            // Route Debug CHỈ đăng ký ở DEBUG build — release không có đích này
+            // (navigate tới sẽ no-op vì route không tồn tại, nhưng FAB kích hoạt
+            // navigate cũng không được dựng ở release).
+            if (BuildConfig.DEBUG) {
+                composable(Routes.DEBUG) {
+                    DebugScreen(
+                        onBackClick = navController::popBackStack,
+                        // launchSingleTop: bấm nhanh 2 lần 1 row không push trùng
+                        // màn chi tiết (góp ý review).
+                        onNavigateToNetworkDetail = { id ->
+                            navController.navigate(Routes.debugNetworkDetail(id)) { launchSingleTop = true }
+                        },
+                        onNavigateToTableDetail = { name ->
+                            navController.navigate(Routes.debugTableDetail(name)) { launchSingleTop = true }
+                        },
+                    )
+                }
+                composable(
+                    route = Routes.DEBUG_NETWORK_DETAIL,
+                    arguments = listOf(navArgument(Routes.DEBUG_NETWORK_DETAIL_ARG_ID) { type = NavType.LongType }),
+                ) {
+                    DebugNetworkDetailScreen(onBackClick = navController::popBackStack)
+                }
+                composable(
+                    route = Routes.DEBUG_TABLE_DETAIL,
+                    arguments = listOf(navArgument(Routes.DEBUG_TABLE_DETAIL_ARG_NAME) { type = NavType.StringType }),
+                ) {
+                    DebugTableDetailScreen(onBackClick = navController::popBackStack)
+                }
             }
             composable(Routes.SEARCH) { backStackEntry ->
                 SearchScreen(
@@ -396,6 +456,60 @@ fun AniMikeNavHost() {
                 )
             }
         }
+    }
+
+        // Ẩn FAB khi đang Ở màn Debug (không tự mở lại chính nó) — cùng
+        // launchSingleTop bên dưới để không đẩy trùng đích DEBUG lên backstack.
+        if (BuildConfig.DEBUG && currentRoute != Routes.DEBUG) {
+            DebugFab(
+                onClick = {
+                    navController.navigate(Routes.DEBUG) { launchSingleTop = true }
+                },
+            )
+        }
+    }
+}
+
+// FAB Debug: nút tròn nổi góc dưới-phải, KÉO-THẢ được (offset tích luỹ theo
+// drag) để user né khỏi nội dung đang xem. Chỉ dựng ở DEBUG build (call site
+// đã gate BuildConfig.DEBUG). Bấm → mở Routes.DEBUG.
+@Composable
+private fun BoxScope.DebugFab(onClick: () -> Unit) {
+    // rememberSaveable: giữ vị trí đã kéo qua xoay màn/process death. Lưu 2
+    // Float rời (Offset không Saveable sẵn). Clamp theo kích thước parent để
+    // FAB không bị kéo ra ngoài màn thành không bấm lại được (góp ý review).
+    var offsetX by rememberSaveable { mutableStateOf(0f) }
+    var offsetY by rememberSaveable { mutableStateOf(0f) }
+    var maxDrag by remember { mutableStateOf(IntSize.Zero) }
+    Box(
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
+            // Lề đáy lớn hơn để nghỉ phía TRÊN bottom nav bar (góp ý user).
+            .padding(end = Dimens.SpaceLg, bottom = Dimens.DebugFabBottomPadding)
+            .size(Dimens.DebugFabSize)
+            .onGloballyPositioned { maxDrag = it.parentLayoutCoordinates?.size ?: IntSize.Zero }
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            .pointerInput(Unit) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    // Neo BottomEnd → offset âm mới đưa FAB vào trong màn; kẹp
+                    // trong [-max, 0] để không lọt ra ngoài cạnh.
+                    offsetX = (offsetX + dragAmount.x).coerceIn(-maxDrag.width.toFloat(), 0f)
+                    offsetY = (offsetY + dragAmount.y).coerceIn(-maxDrag.height.toFloat(), 0f)
+                }
+            }
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "Mở màn Debug" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "🐞",
+            style = MaterialTheme.typography.titleMedium,
+            // Box cha đã có contentDescription — ẩn glyph khỏi TalkBack.
+            modifier = Modifier.clearAndSetSemantics {},
+        )
     }
 }
 

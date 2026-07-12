@@ -1,7 +1,7 @@
 package com.lambao.animike.data.repository
 
-import android.util.Log
 import com.lambao.animike.data.local.dao.FavoriteDao
+import com.lambao.animike.debug.AppLog
 import com.lambao.animike.domain.mapper.toDomain
 import com.lambao.animike.domain.mapper.toFavoriteEntity
 import com.lambao.animike.domain.model.Anime
@@ -36,7 +36,7 @@ class FavoriteRepositoryImpl @Inject constructor(
             throw e
         } catch (e: Exception) {
             // Local-only, không nghiêm trọng — icon trái tim không đổi, user bấm lại được.
-            Log.w(TAG, "Không toggle được favorite cho malId=${anime.malId}", e)
+            AppLog.w(TAG, "Không toggle được favorite cho malId=${anime.malId}", e)
         }
     }
 }

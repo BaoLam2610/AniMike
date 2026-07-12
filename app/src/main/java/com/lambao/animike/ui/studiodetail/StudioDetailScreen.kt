@@ -2,7 +2,6 @@ package com.lambao.animike.ui.studiodetail
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +53,7 @@ import androidx.paging.compose.itemContentType
 import androidx.paging.compose.itemKey
 import coil3.compose.AsyncImage
 import com.lambao.animike.data.repository.toAppError
+import com.lambao.animike.debug.AppLog
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.domain.model.StudioDetail
 import com.lambao.animike.domain.model.StudioExternalLink
@@ -86,7 +86,7 @@ fun StudioDetailScreen(
                     try {
                         context.startActivity(Intent(Intent.ACTION_VIEW, effect.url.toUri()))
                     } catch (e: ActivityNotFoundException) {
-                        Log.w("StudioDetailScreen", "Không có app xử lý được link studio", e)
+                        AppLog.w("StudioDetailScreen", "Không có app xử lý được link studio", e)
                     }
                 }
             }
