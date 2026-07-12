@@ -381,13 +381,14 @@ private fun WatchStatusButton(
     currentStatus: WatchStatus?,
     availableStatuses: List<WatchStatus>,
     onStatusSelected: (WatchStatus) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // Menu là transient UI (đóng khi dismiss/chọn) — remember thường, không
     // cần saveable qua process death.
     var menuExpanded by remember { mutableStateOf(false) }
     val accent = currentStatus?.statusColor() ?: MaterialTheme.colorScheme.onBackground
 
-    Box {
+    Box(modifier = modifier) {
         Box(
             modifier = Modifier
                 .size(Dimens.IconButtonSize)

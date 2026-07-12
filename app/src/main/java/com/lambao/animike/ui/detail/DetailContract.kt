@@ -58,18 +58,30 @@ data class DetailState(
     // chưa chiếu không thể "Đang xem/Đã xem"): sắp chiếu → chỉ Dự định xem;
     // đang chiếu → ẩn Đã xem (chưa kết thúc thì chưa "xem xong", giống MAL);
     // chiếu xong → đủ 5. Trạng thái ĐANG set luôn được giữ trong danh sách
-    // (kể cả khi không còn hợp lệ do dữ liệu Jikan đổi) để user bỏ được nó.
+    // (kể cả khi không còn hợp lệ do dữ liệu Jikan đổi) để user bỏ được nó —
+    // chèn đúng vị trí theo ordinal gốc (sortedBy) thay vì luôn nhảy lên đầu,
+    // giữ thứ tự menu ổn định (góp ý từ review).
     val availableWatchStatuses: List<WatchStatus>
         get() {
             val d = detail ?: return emptyList()
             val base = when {
-                d.status.equals("Not yet aired", ignoreCase = true) -> listOf(WatchStatus.PLAN_TO_WATCH)
+                d.status.equals(JIKAN_STATUS_NOT_YET_AIRED, ignoreCase = true) -> listOf(WatchStatus.PLAN_TO_WATCH)
                 d.isAiring -> WatchStatus.entries.filter { it != WatchStatus.COMPLETED }
-                else -> WatchStatus.entries.toList()
+                else -> WatchStatus.entries
             }
-            return if (watchStatus != null && watchStatus !in base) listOf(watchStatus) + base else base
+            return if (watchStatus != null && watchStatus !in base) {
+                (base + watchStatus).sortedBy { it.ordinal }
+            } else {
+                base
+            }
         }
 }
+
+// Jikan/MAL `status` là 1 trong 3 chuỗi cố định: "Not yet aired" |
+// "Currently Airing" | "Finished Airing" (xem .claude/skills/jikan-api).
+// AnimeDetail không có boolean tương đương cho "chưa chiếu" (chỉ có
+// `isAiring` cho nhánh "đang chiếu") nên phải so chuỗi trực tiếp.
+private const val JIKAN_STATUS_NOT_YET_AIRED = "Not yet aired"
 
 sealed interface DetailEvent {
     data object OnRetry : DetailEvent

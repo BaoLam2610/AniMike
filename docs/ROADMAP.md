@@ -674,6 +674,19 @@ Detail, People/Seiyuu Detail, Studio Detail, Top nhân vật. Tiếp theo: MVP 6
     (giống MAL); chiếu xong → đủ 5. Trạng thái ĐANG set luôn giữ trong menu
     (kể cả khi không còn hợp lệ do dữ liệu Jikan đổi) để user bỏ được. Đợt 2
     (tiến độ tập) cũng sẽ theo luật này — phim chưa chiếu không có stepper.
+  - **Review vòng 2 (redesign) clean, đã sửa 4 mục 🟡/🟢**: tách hằng
+    `JIKAN_STATUS_NOT_YET_AIRED` (kèm ghi chú 3 giá trị `status` của Jikan vào
+    `jikan-api/SKILL.md` — `"Currently Airing"`/`"Finished Airing"` đã
+    curl-verify 2026-07-12, `"Not yet aired"` CHƯA verify được do
+    `/seasons/upcoming` bị 504 tạm thời từ Jikan/MAL lúc verify, cần curl lại
+    khi có dịp); `WatchStatusButton` thêm `modifier` param cho nhất quán với
+    Back/FavoriteButton; sửa comment lỗi thời nhắc `TrackingStatusBar` (đã bị
+    xoá) trong `WatchStatusUi.kt`; trạng thái lạc khỏi danh sách hợp lệ giờ
+    chèn đúng theo `ordinal` thay vì luôn nhảy lên đầu. Ghi nhận (không sửa,
+    cần verify bằng mắt): emoji 🕒/🔖 là pictograph nhiều màu nên
+    `Text(color=...)` không tô lại được glyph (đã có tiền lệ 📅 ở
+    StudioDetail) — nhãn chữ cạnh nó vẫn lên đúng màu, chỉ glyph giữ màu gốc
+    hệ điều hành.
   - **"Danh sách" nâng thành THƯ VIỆN**: hợp nhất (union) favorites +
     tracking qua `combine` 2 Flow trong `FavoritesViewModel` — anime chỉ có
     trạng thái (không yêu thích) giờ cũng xuất hiện. Hàng **filter chip**:

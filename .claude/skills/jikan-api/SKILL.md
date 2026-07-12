@@ -44,6 +44,17 @@ Base URL: `https://api.jikan.moe/v4` — không cần API key, **chỉ đọc** 
 | Chi tiết studio | `GET /producers/{id}/full` (không kèm list anime) |
 | Anime của 1 studio | `GET /anime?producers={id}&page=` (dùng lại `searchAnime`, pagination thật) |
 
+**`status` của anime (MVP6 tracking, dùng để lọc trạng thái xem hợp lệ)** —
+3 giá trị chuỗi cố định trên field `data.status` của `/anime/{id}/full`:
+`"Currently Airing"` (verify qua curl 2026-07-12, id=21 One Piece) /
+`"Finished Airing"` (verify qua curl, id=1, id=62000) / `"Not yet aired"`
+(⚠️ CHƯA verify trực tiếp phiên này — `/seasons/upcoming` bị 504 từ Jikan/MAL
+lúc verify, đây là giá trị third-case suy ra từ tài liệu Jikan công khai +
+logic loại trừ với field `airing: Boolean`, nên verify lại bằng curl khi có
+dịp trước khi dựa hẳn vào nó cho logic quan trọng). Dùng ở
+`DetailContract.kt` (`availableWatchStatuses`) để ẩn "Đang xem"/"Đã xem" cho
+phim sắp chiếu.
+
 **Manga (phase sau):** toàn bộ endpoint manga (`/manga`, `/manga/{id}/full`,
 `/top/manga`, `/genres/manga`, `/recommendations/manga`, sub-resource...) đã gom +
 verify shape ở `references/manga-endpoints.md` — đọc trước khi bắt tay phase Manga.
