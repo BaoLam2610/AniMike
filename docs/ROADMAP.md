@@ -3,6 +3,10 @@
 Hiện trạng project: Kotlin + Jetpack Compose (Material 3), minSdk 24, targetSdk 36.
 Đã hoàn thành Phase 0a → MVP 6 (Tracking local) — tiếp theo xem mục "Xa hơn".
 
+> **Redesign v2 (2026-07):** đang có kế hoạch đổi hẳn hướng thị giác sang premium
+> cinema-dark + accent champagne gold — chi tiết 11 đợt ở `docs/REDESIGN_V2.md`
+> (spec: `animike-design` SKILL.md v2.0.0 + `design/tokens.json`).
+
 **Skills & agents đã cài trong `.claude/`** (Claude Code tự nhận, xem `CLAUDE.md` ở root):
 - `skills/compose-expert` — guide Compose chuyên sâu (24 references + source androidx)
 - `skills/animike-design` — design system dark anime-style (bắt buộc cho mọi UI)
