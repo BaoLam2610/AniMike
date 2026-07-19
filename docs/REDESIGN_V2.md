@@ -63,7 +63,43 @@ Nguyên tắc rollout: mỗi đợt **xong hẳn (build + review + commit) mới
 trước. **Quyết định khác kế hoạch gốc**: viền hairline làm NGAY (không hoãn sang
 Đợt 11) — thêm token `Dimens.BorderHairline` (1dp) + áp đồng thời cho cả 3 nơi
 (tránh nửa vời): `AnimeCard`, `TopCharacterCard`, 2 poster con trong
-`CommunityRecommendationCard`, viền màu `colorScheme.outline`.
+`CommunityRecommendationCard`, viền màu `colorScheme.outline`. Review phát hiện 1
+mục 🟡 (accessibility): số rank ở `AnimeCard` chưa có `contentDescription` cho
+TalkBack — đã fix luôn cùng đợt (`clearAndSetSemantics { "Hạng $rank" }`, đồng bộ
+với `TopCharacterCard.RankRibbon`).
+
+**Đợt 3 — hoàn thành ✅ (2026-07)**: `ui/home/` gần như tự lên da 100% nhờ token
+discipline từ Đợt 1/2 (dot indicator, nút hero, section header đều đã đọc
+`colorScheme`/`Dimens`/`Type.kt`, không cần sửa). Chỉ **1 file, 2 chỗ sửa code
+thật** trong `HomeScreen.kt`: gradient overlay hero `0.85f`→`Dimens.GradientOverlayAlpha`
+(0.88f, cùng lỗi đã sửa ở `NewEpisodeCard` tại Đợt 2 nhưng bị bỏ sót ở Home) và
+`@Preview backgroundColor` `0xFF0B0E14`→`0xFF08080B` (khớp nền v2). `HomeContract.kt`/
+`HomeViewModel.kt` không đổi (đúng nguyên tắc chỉ đổi da). Quyết định: giữ wordmark
+"AniMike" ở TopBar là Montserrat (không nâng lên Cormorant) — đúng phạm vi đã duyệt,
+không tự ý mở rộng.
+
+**accessibility-reviewer phát hiện 1 🔴 blocker + 4 🟡 (đã fix hết, 2 vòng review)**:
+đây là màn đầu tiên ráp toàn bộ component đã redesign ở Đợt 2 cùng lúc, lộ ra vấn đề
+tồn tại từ trước (không do 2 dòng diff Đợt 3 gây ra) nhưng được coi là blocker vì lặp
+lại có hệ thống:
+- 🔴 nút "Xem tất cả" ở CẢ 4 section (`Text+clickable+padding(SpaceXs)` → vùng chạm
+  chỉ ~24-28dp) → đổi sang `TextButton` (tự đảm bảo ≥48dp + `Role.Button`), đồng bộ
+  pattern với `SectionError`'s "Thử lại" đã có sẵn.
+- 🟡 dot indicator pager chỉ phân biệt active/inactive bằng màu → dot active giờ
+  RỘNG gấp 3 (`Dimens.PagerDotSize * 3` width, height giữ nguyên) — vừa khác kích
+  thước vừa khác hình dạng (pill vs tròn).
+- 🟡 ảnh hero full-bleed là vùng bấm chính nhưng thiếu nhãn TalkBack (clickable trên
+  node lá, không merge được với title) → thêm `onClickLabel = "Xem chi tiết
+  ${anime.title}"` + `role = Role.Button` tường minh.
+- 🟡 nút "Yêu thích" hero chỉ đổi glyph "✓"/"+" → thêm `Modifier.semantics {
+  stateDescription = "Đã yêu thích"/"Chưa yêu thích" }`.
+- 🟡 tiêu đề hero mất tương phản trên ảnh sáng (gradient toàn box không neo đúng
+  vùng chữ) — **vòng 1 sửa sai hướng** (thêm 1 gradient thứ 2 lại để hở đúng dòng
+  đầu tiêu đề, nơi gradient bắt đầu từ Transparent); **vòng 2 sửa đúng**: đổi thành
+  scrim PHẲNG (`background.copy(alpha = 0.85f)`, không phải `Brush.verticalGradient`)
+  phủ đều nguyên `Column` chứa title+nút. Verify bằng tính toán WCAG luminance thật
+  (không chỉ ước lượng): worst-case ảnh nền trắng thuần, dòng đầu tiêu đề đạt
+  **14.3–15:1** (vượt xa AAA 7:1).
 
 ## File theo từng đợt
 

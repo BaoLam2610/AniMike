@@ -51,6 +51,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -419,7 +421,13 @@ private fun HeroPager(
                 val selected = pagerState.currentPage == index
                 Box(
                     modifier = Modifier
-                        .size(Dimens.PagerDotSize)
+                        // v2 a11y: dot active RỘNG hơn hẳn (không chỉ đổi màu) để
+                        // phân biệt được dù không thấy màu (low-vision) —
+                        // accessibility-reviewer, Đợt 3.
+                        .size(
+                            width = if (selected) Dimens.PagerDotSize * 3 else Dimens.PagerDotSize,
+                            height = Dimens.PagerDotSize,
+                        )
                         .clip(CircleShape)
                         .background(
                             if (selected) MaterialTheme.colorScheme.primary
@@ -448,18 +456,41 @@ private fun HeroPage(
             placeholder = placeholderPainter,
             error = placeholderPainter,
             fallback = placeholderPainter,
-            modifier = Modifier.fillMaxSize().clickable(onClick = onClick),
+            // v2 a11y: ảnh chiếm gần trọn hero là vùng bấm chính nhưng trước đó
+            // không có nhãn (clickable trên node lá, không merge được với title
+            // Column là sibling riêng) — TalkBack quét tới sẽ gặp action rỗng
+            // nhãn. Gán onClickLabel + Role.Button tường minh thay vì trông chờ
+            // mergeDescendants (accessibility-reviewer, Đợt 3).
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    onClickLabel = "Xem chi tiết ${anime.title}",
+                    role = Role.Button,
+                    onClick = onClick,
+                ),
         )
-        // Gradient overlay #0B0E14 alpha 0->85% bottom-up (animike-design SKILL.md)
+        // Gradient overlay 0->88% bottom-up (v2, animike-design SKILL.md)
         val background = MaterialTheme.colorScheme.background
         val gradient = remember(background) {
-            Brush.verticalGradient(colors = listOf(Color.Transparent, background.copy(alpha = 0.85f)))
+            Brush.verticalGradient(colors = listOf(Color.Transparent, background.copy(alpha = Dimens.GradientOverlayAlpha)))
         }
         Box(modifier = Modifier.fillMaxSize().background(gradient))
 
+        // v2 a11y: scrim RIÊNG PHẲNG (không phải gradient) phủ đều nguyên vùng
+        // chứa title/nút — gradient toàn box ở trên là 1 dải tuyến tính theo cả
+        // HeroHeaderHeight nên alpha thực tế tại dòng tiêu đề (nằm giữa box,
+        // không phải đáy) chưa đủ đậm với ảnh cover sáng màu. Cố tình KHÔNG
+        // dùng Brush.verticalGradient ở đây (khác gradient chính) vì Column này
+        // đã ôm sát đúng vùng chữ (~150dp, không phải cả 360dp của box) — một
+        // gradient thứ 2 sẽ lại để hở đúng dòng đầu tiêu đề (nơi gradient bắt
+        // đầu từ Transparent), y hệt lỗi đang cần sửa. Alpha đều đảm bảo mọi
+        // dòng chữ trong Column được bảo vệ như nhau (accessibility-reviewer,
+        // Đợt 3 — vòng 2).
         Column(
             modifier = Modifier
                 .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .background(background.copy(alpha = 0.85f))
                 .padding(Dimens.ScreenPadding),
             verticalArrangement = Arrangement.spacedBy(Dimens.SpaceMd),
         ) {
@@ -474,7 +505,16 @@ private fun HeroPage(
                 Button(onClick = onClick, shape = RoundedCornerShape(Dimens.RadiusButton)) {
                     Text("Xem chi tiết")
                 }
-                OutlinedButton(onClick = onFavoriteClick, shape = RoundedCornerShape(Dimens.RadiusButton)) {
+                OutlinedButton(
+                    onClick = onFavoriteClick,
+                    shape = RoundedCornerShape(Dimens.RadiusButton),
+                    // v2 a11y: TalkBack trước đây đọc lẫn ký hiệu "✓"/"+" vào
+                    // câu — stateDescription cho trạng thái rõ ràng, không phụ
+                    // thuộc glyph (accessibility-reviewer, Đợt 3).
+                    modifier = Modifier.semantics {
+                        stateDescription = if (isFavorite) "Đã yêu thích" else "Chưa yêu thích"
+                    },
+                ) {
                     Text(if (isFavorite) "✓ Yêu thích" else "+ Yêu thích")
                 }
             }
@@ -505,15 +545,12 @@ private fun AnimeSection(
                 modifier = Modifier.weight(1f),
             )
             // Chỉ mời "Xem tất cả" khi thực sự còn nhiều hơn số đang preview.
+            // TextButton (thay Text+clickable) tự đảm bảo vùng chạm ≥48dp +
+            // Role.Button cho TalkBack (accessibility-reviewer, Đợt 3).
             if (onSeeAllClick != null && section.animeList.size > SECTION_PREVIEW_LIMIT) {
-                Text(
-                    text = "Xem tất cả",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clickable(onClick = onSeeAllClick)
-                        .padding(Dimens.SpaceXs),
-                )
+                TextButton(onClick = onSeeAllClick) {
+                    Text("Xem tất cả")
+                }
             }
         }
         when {
@@ -592,14 +629,9 @@ private fun NewEpisodesSection(
                 modifier = Modifier.weight(1f),
             )
             if (section.releases.size > SECTION_PREVIEW_LIMIT) {
-                Text(
-                    text = "Xem tất cả",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clickable(onClick = onSeeAllClick)
-                        .padding(Dimens.SpaceXs),
-                )
+                TextButton(onClick = onSeeAllClick) {
+                    Text("Xem tất cả")
+                }
             }
         }
         when {
@@ -671,14 +703,9 @@ private fun CommunityRecommendationsSection(
             // size > SECTION_PREVIEW_LIMIT vẫn đúng, tránh mời bấm "Xem tất cả"
             // lúc đang loading/lỗi/rỗng thật.
             if (section.recommendations.size > SECTION_PREVIEW_LIMIT) {
-                Text(
-                    text = "Xem tất cả",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clickable(onClick = onSeeAllClick)
-                        .padding(Dimens.SpaceXs),
-                )
+                TextButton(onClick = onSeeAllClick) {
+                    Text("Xem tất cả")
+                }
             }
         }
         when {
@@ -750,14 +777,9 @@ private fun TopCharactersSection(
                 modifier = Modifier.weight(1f),
             )
             if (section.characters.size > SECTION_PREVIEW_LIMIT) {
-                Text(
-                    text = "Xem tất cả",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .clickable(onClick = onSeeAllClick)
-                        .padding(Dimens.SpaceXs),
-                )
+                TextButton(onClick = onSeeAllClick) {
+                    Text("Xem tất cả")
+                }
             }
         }
         when {
@@ -819,7 +841,7 @@ private fun SectionError(message: String, onRetry: () -> Unit) {
     }
 }
 
-@Preview(showBackground = true, backgroundColor = 0xFF0B0E14)
+@Preview(showBackground = true, backgroundColor = 0xFF08080B)
 @Composable
 private fun HomeScreenPreview() {
     AniMikeTheme {
