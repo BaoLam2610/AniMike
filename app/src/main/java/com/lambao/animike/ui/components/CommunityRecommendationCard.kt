@@ -1,6 +1,8 @@
 package com.lambao.animike.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -97,7 +99,12 @@ private fun RecommendationPoster(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(Dimens.RadiusChip)),
+                .clip(RoundedCornerShape(Dimens.RadiusChip))
+                // v2: viền hairline "khung tranh" — đồng bộ với AnimeCard/TopCharacterCard.
+                .border(
+                    BorderStroke(Dimens.BorderHairline, MaterialTheme.colorScheme.outline),
+                    RoundedCornerShape(Dimens.RadiusChip),
+                ),
         )
         Text(
             text = title,

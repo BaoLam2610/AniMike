@@ -76,6 +76,12 @@ object Dimens {
     // rác (góp ý từ review).
     val BorderThin = 2.dp
 
+    // v2: viền hairline "khung tranh" quanh poster (AnimeCard/TopCharacterCard/
+    // CommunityRecommendationCard) — màu colorScheme.outline, mảnh hơn BorderThin
+    // (2dp, dành cho ring avatar) vì đây chỉ là đường phân định tinh tế, không
+    // phải điểm nhấn.
+    val BorderHairline = 1.dp
+
     // Logo studio ở Studio Detail (MVP5) — ContentScale.Fit trong card surface,
     // to hơn AvatarSize vì là điểm nhấn chính của màn.
     val StudioLogoSize = 120.dp

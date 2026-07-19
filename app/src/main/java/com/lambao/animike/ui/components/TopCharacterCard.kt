@@ -1,6 +1,8 @@
 package com.lambao.animike.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,7 +58,12 @@ fun TopCharacterCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(2f / 3f)
-                    .clip(RoundedCornerShape(Dimens.RadiusCard)),
+                    .clip(RoundedCornerShape(Dimens.RadiusCard))
+                    // v2: viền hairline "khung tranh" — đồng bộ với AnimeCard.
+                    .border(
+                        BorderStroke(Dimens.BorderHairline, MaterialTheme.colorScheme.outline),
+                        RoundedCornerShape(Dimens.RadiusCard),
+                    ),
             )
             if (rank != null && rank in 1..3) {
                 RankRibbon(rank = rank, modifier = Modifier.align(Alignment.TopStart).padding(Dimens.SpaceSm))

@@ -56,11 +56,11 @@ fun NewEpisodeCard(release: NewEpisodeRelease, onClick: () -> Unit, modifier: Mo
             fallback = placeholderPainter,
             modifier = Modifier.fillMaxSize(),
         )
-        // Gradient đáy 0->85% (khớp hero/trailer card) để text luôn đọc được
-        // bất kể ảnh sáng/tối.
+        // Gradient đáy 0->88% (v2, khớp hero/trailer card) để text luôn đọc
+        // được bất kể ảnh sáng/tối.
         val background = MaterialTheme.colorScheme.background
         val gradient = remember(background) {
-            Brush.verticalGradient(colors = listOf(Color.Transparent, background.copy(alpha = 0.85f)))
+            Brush.verticalGradient(colors = listOf(Color.Transparent, background.copy(alpha = Dimens.GradientOverlayAlpha)))
         }
         Box(modifier = Modifier.fillMaxSize().background(gradient))
         Column(

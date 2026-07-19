@@ -1,6 +1,8 @@
 package com.lambao.animike.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import coil3.compose.AsyncImage
 import com.lambao.animike.domain.model.Anime
@@ -61,7 +65,13 @@ fun AnimeCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(2f / 3f)
-                    .clip(RoundedCornerShape(Dimens.RadiusCard)),
+                    .clip(RoundedCornerShape(Dimens.RadiusCard))
+                    // v2: viền hairline "khung tranh" — cảm giác premium, xem
+                    // animike-design SKILL.md mục AnimeCard.
+                    .border(
+                        BorderStroke(Dimens.BorderHairline, MaterialTheme.colorScheme.outline),
+                        RoundedCornerShape(Dimens.RadiusCard),
+                    ),
             )
             // Mapper trả "N/A" khi Jikan không có score — ẩn badge thay vì hiện "N/A"
             if (anime.score != "N/A") {
@@ -79,7 +89,11 @@ fun AnimeCard(
                     ),
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(Dimens.SpaceSm),
+                        .padding(Dimens.SpaceSm)
+                        // TalkBack đọc "Hạng 1" thay vì số trần ghép lẫn vào
+                        // title/year khi merge semantics — cùng pattern với
+                        // TopCharacterCard.RankRibbon (accessibility-reviewer, Đợt 2).
+                        .clearAndSetSemantics { contentDescription = "Hạng $rank" },
                 )
             }
         }

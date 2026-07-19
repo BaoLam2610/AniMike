@@ -55,7 +55,15 @@ Nguyên tắc rollout: mỗi đợt **xong hẳn (build + review + commit) mới
 | 8 | **Các màn detail phụ** | characterdetail, persondetail, studiodetail, topcharacters, characters, reviews, reviewdetail, episodes, newepisodes, communityrecommendations | compose-reviewer |
 | 9 | **Light mode + toggle** | lightColorScheme, làm `warning/rank*/success` scheme-aware, ThemeMode + DataStore + màn Settings, `values-night/colors.xml` | accessibility-reviewer (chính) + compose-reviewer |
 | 10 | **Icon vector riêng** | Thiết kế bộ SVG (skill `ui-ux-pro-max:design`) → vector drawable → thay glyph/emoji ở bottom bar + toàn app | compose-reviewer + accessibility-reviewer (target ≥48dp) |
-| 11 | **Polish motion (3/10)** | Rà motion nhẹ, hạn chế shadow nặng, hairline nhất quán, **xoá Inter + hằng số thừa** | compose-reviewer (compose-android nếu jank) |
+| 11 | **Polish motion (3/10)** | Rà motion nhẹ, hạn chế shadow nặng, **xoá Inter + hằng số thừa** | compose-reviewer (compose-android nếu jank) |
+
+**Đợt 2 — hoàn thành ✅ (2026-07)**: 9/9 file xử lý xong. Thực tế: chỉ
+`NewEpisodeCard.kt` cần sửa code thật (gradient `0.85f`→`Dimens.GradientOverlayAlpha`
+0.88f) — 8 file còn lại tự đúng nhờ đọc `MaterialTheme.colorScheme.*`/extension từ
+trước. **Quyết định khác kế hoạch gốc**: viền hairline làm NGAY (không hoãn sang
+Đợt 11) — thêm token `Dimens.BorderHairline` (1dp) + áp đồng thời cho cả 3 nơi
+(tránh nửa vời): `AnimeCard`, `TopCharacterCard`, 2 poster con trong
+`CommunityRecommendationCard`, viền màu `colorScheme.outline`.
 
 ## File theo từng đợt
 
