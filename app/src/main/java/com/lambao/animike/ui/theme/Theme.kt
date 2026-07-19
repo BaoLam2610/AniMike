@@ -8,9 +8,9 @@ import androidx.compose.ui.graphics.Color
 
 private val AniMikeColorScheme = darkColorScheme(
     primary = Primary,
-    onPrimary = Background,
+    onPrimary = OnPrimary,          // v2: nâu đậm trên nền gold (không còn Background)
     secondary = Secondary,
-    onSecondary = Background,
+    onSecondary = OnSecondary,      // v2: nâu-đỏ trên nền rose gold
     tertiary = Tertiary,
     onTertiary = Background,
     background = Background,
@@ -24,7 +24,7 @@ private val AniMikeColorScheme = darkColorScheme(
     surfaceContainer = Surface,
     surfaceContainerLow = Background,
     surfaceContainerHigh = SurfaceVariant,
-    outline = OnSurfaceVariant,
+    outline = Outline,              // v2: hairline border riêng (không còn dùng OnSurfaceVariant)
     outlineVariant = SurfaceVariant,
     error = Error,
     onError = Background,

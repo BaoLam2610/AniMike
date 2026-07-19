@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import coil3.compose.AsyncImage
 import com.lambao.animike.domain.model.Anime
 import com.lambao.animike.ui.theme.Dimens
+import com.lambao.animike.ui.theme.RankNumberTextStyle
 
 // Rộng cố định 120dp khi dùng trong LazyRow (Home/Detail), fillMaxWidth khi
 // dùng trong grid (Search) — width do modifier của call site quyết định.
@@ -72,7 +73,7 @@ fun AnimeCard(
             if (rank != null) {
                 Text(
                     text = "$rank",
-                    style = MaterialTheme.typography.headlineSmall.copy(
+                    style = RankNumberTextStyle.copy(
                         color = Color.White,
                         shadow = Shadow(color = Color.Black.copy(alpha = 0.6f), blurRadius = 8f),
                     ),

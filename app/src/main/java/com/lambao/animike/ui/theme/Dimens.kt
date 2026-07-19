@@ -20,8 +20,13 @@ object Dimens {
     // Corner radius
     val RadiusChip = 8.dp
     val RadiusCard = 12.dp
-    val RadiusButton = 12.dp
+    val RadiusButton = 10.dp   // v2: nút bo nhẹ hơn (premium)
     val RadiusSheet = 20.dp
+
+    // Scrim gradient đè lên ảnh cover để chữ luôn đọc được (0→này, bottom-up).
+    // v2: 0.88 (nền tối hơn #08080B). Rút thành hằng số thay 0.85f rải rác ở
+    // DetailScreen/CharacterDetailScreen/NewEpisodeCard.
+    const val GradientOverlayAlpha = 0.88f
 
     // Hero header — dùng chung cho Detail (ảnh cover full-width) và Home (hero
     // section, kit Animax MVP3 UI-2)
